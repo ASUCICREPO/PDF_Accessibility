@@ -1,0 +1,17 @@
+*.swp
+package-lock.json
+__pycache__
+.pytest_cache
+.venv
+*.egg-info
+.git
+.cdk
+client_credentials.json
+# CDK asset staging directory
+.cdk.staging
+cdk.out
+cdk.out/
+.cdk.staging/
+__pycache__/
+*.pyc
+docker_javascript/node_modules/

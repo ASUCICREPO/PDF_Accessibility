@@ -1,0 +1,10 @@
+aws-cdk.core==2.64.0
+aws-cdk.aws-s3==2.64.0
+aws-cdk.aws-lambda==2.64.0
+aws-cdk.aws-ec2==2.64.0
+aws-cdk.aws-iam==2.64.0
+aws-cdk.aws-dynamodb==2.64.0
+aws-cdk.aws-sqs==2.64.0
+aws-cdk.aws-sns==2.64.0
+aws-cdk.aws-sns-subscriptions==2.64.0
+aws-cdk.aws-s3-notifications==2.64.0
