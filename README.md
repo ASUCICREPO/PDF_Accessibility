@@ -1,58 +1,51 @@
+# PDF Accessibility Pipeline using AWS CDK
 
-# Welcome to your CDK Python project!
+This project implements a serverless architecture for processing and enhancing the accessibility of PDF files, leveraging AWS services such as Lambda, Step Functions, ECS, S3, and CloudWatch. The pipeline automatically tags PDF files with accessibility metadata and generates alternative text for images and links using Large Language Models (LLM).
 
-This is a blank project for CDK development with Python.
+## Architecture Overview
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+1. **S3 Bucket**: Stores the PDF files to be processed.
+2. **Lambda Functions**: 
+   - **Split PDF Lambda**: Splits large PDF files into smaller chunks and triggers further processing.
+   - **Java Lambda (PDF Merger)**: Merges processed chunks back into a single PDF.
+3. **ECS Tasks**: 
+   - **Task 1 (Adobe Autotag & Extract)**: Adds tags to improve PDF accessibility.
+   - **Task 2 (LLM Alt Text Generation)**: Generates alternative text for images in the PDF.
+4. **Step Functions**: Orchestrates the entire workflow from splitting the PDF to generating accessibility metadata and merging the results.
+5. **CloudWatch Dashboard**: Monitors the entire process, with logs and metrics displayed for easy debugging and tracking.
 
-This project is set up like a standard Python project.  The initialization
-process also creates a virtualenv within this project, stored under the `.venv`
-directory.  To create the virtualenv it assumes that there is a `python3`
-(or `python` for Windows) executable in your path with access to the `venv`
-package. If for any reason the automatic creation of the virtualenv fails,
-you can create the virtualenv manually.
+## Key Components
 
-To manually create a virtualenv on MacOS and Linux:
+### AWS CDK (Cloud Development Kit)
 
-```
-$ python3 -m venv .venv
-```
+This project is built using AWS CDK (Python), which allows you to define your cloud infrastructure as code.
 
-After the init process completes and the virtualenv is created, you can use the following
-step to activate your virtualenv.
+### Services Used
 
-```
-$ source .venv/bin/activate
-```
+- **S3**: For storing PDFs and processing results.
+- **Lambda**: To handle splitting and merging PDFs.
+- **ECS (Fargate)**: For running Docker containers that perform autotagging and alt text generation.
+- **Step Functions**: To orchestrate the workflow.
+- **Secrets Manager**: To store sensitive information securely.
+- **CloudWatch**: For logging and monitoring.
+- **Adobe API**: For autotagging.
 
-If you are a Windows platform, you would activate the virtualenv like this:
 
-```
-% .venv\Scripts\activate.bat
-```
+### Installation
 
-Once the virtualenv is activated, you can install the required dependencies.
+1. Clone the repository:
+git clone git@github.com:ASUCICREPO/PDF_Accessibility.git
 
-```
-$ pip install -r requirements.txt
-```
+2. Bootstrap your AWS environment (if not already done)
 
-At this point you can now synthesize the CloudFormation template for this code.
+3. Build and deploy the CDK stack:
+cdk deploy
 
-```
-$ cdk synth
-```
+## Monitoring and Logs
 
-To add additional dependencies, for example other CDK libraries, just add
-them to your `setup.py` file and rerun the `pip install -r requirements.txt`
-command.
+CloudWatch Logs and Metrics are configured for all Lambda functions, ECS tasks, and Step Functions. The logs are visible in the CloudWatch console, and a custom dashboard is created to track the status of files and the overall workflow.
 
-## Useful commands
+## Contributions
 
- * `cdk ls`          list all stacks in the app
- * `cdk synth`       emits the synthesized CloudFormation template
- * `cdk deploy`      deploy this stack to your default AWS account/region
- * `cdk diff`        compare deployed stack with current state
- * `cdk docs`        open CDK documentation
+Contributions are welcome! Please submit pull requests or open issues for any changes or enhancements.
 
-Enjoy!
