@@ -1,51 +1,124 @@
-# PDF Accessibility Pipeline using AWS CDK
+# PDF Processing AWS Infrastructure
 
-This project implements a serverless architecture for processing and enhancing the accessibility of PDF files, leveraging AWS services such as Lambda, Step Functions, ECS, S3, and CloudWatch. The pipeline automatically tags PDF files with accessibility metadata and generates alternative text for images and links using Large Language Models (LLM).
+This project builds an AWS infrastructure using AWS CDK (Cloud Development Kit) to split a PDF into chunks, process the chunks via AWS Step Functions, and merge the resulting chunks back using ECS tasks. The infrastructure also includes monitoring via CloudWatch dashboards and metrics for tracking progress.
 
-## Architecture Overview
+## Prerequisites
 
-1. **S3 Bucket**: Stores the PDF files to be processed.
-2. **Lambda Functions**: 
-   - **Split PDF Lambda**: Splits large PDF files into smaller chunks and triggers further processing.
-   - **Java Lambda (PDF Merger)**: Merges processed chunks back into a single PDF.
-3. **ECS Tasks**: 
-   - **Task 1 (Adobe Autotag & Extract)**: Adds tags to improve PDF accessibility.
-   - **Task 2 (LLM Alt Text Generation)**: Generates alternative text for images in the PDF.
-4. **Step Functions**: Orchestrates the entire workflow from splitting the PDF to generating accessibility metadata and merging the results.
-5. **CloudWatch Dashboard**: Monitors the entire process, with logs and metrics displayed for easy debugging and tracking.
+Before running the AWS CDK stack, ensure the following are installed and configured:
 
-## Key Components
+1. **AWS Bedrock Access**: Ensure your AWS account has access to the Claude 3.5 model in Amazon Bedrock.
+   - Request access through the AWS console if not already enabled
 
-### AWS CDK (Cloud Development Kit)
+2. **Adobe API Access**: An enterprise-level contract or trial account for Adobe's API is required.
+   - Sign up for an Adobe enterprise account or request a trial
+   - Obtain the necessary API credentials (key, secret, etc.)
 
-This project is built using AWS CDK (Python), which allows you to define your cloud infrastructure as code.
+3. **Python**: The project likely uses Python for some components.
+   - Install Python (version 3.7 or later)
+   - Set up a virtual environment for the project
 
-### Services Used
+4. **AWS CLI**: To interact with AWS services and set up credentials.
+   - Install AWS CLI
 
-- **S3**: For storing PDFs and processing results.
-- **Lambda**: To handle splitting and merging PDFs.
-- **ECS (Fargate)**: For running Docker containers that perform autotagging and alt text generation.
-- **Step Functions**: To orchestrate the workflow.
-- **Secrets Manager**: To store sensitive information securely.
-- **CloudWatch**: For logging and monitoring.
-- **Adobe API**: For autotagging.
+5. **AWS CDK**: For defining cloud infrastructure in code.
+   - Install AWS CDK
 
+6. **Docker**: Required to build and run Docker images for the ECS tasks.
+   - Install Docker
 
-### Installation
+7. **AWS Account Permissions**: Ensure your AWS account has the necessary permissions to create and manage the required resources (S3, Lambda, Step Functions, ECS, ECR, CloudWatch, etc.)
 
-1. Clone the repository:
-git clone git@github.com:ASUCICREPO/PDF_Accessibility.git
+## Directory Structure
 
-2. Bootstrap your AWS environment (if not already done)
+Ensure your project has the following structure:
 
-3. Build and deploy the CDK stack:
-cdk deploy
+```
+├── app.py (Main CDK app)
+├── lambda/
+│   ├── split_pdf/ (Python Lambda for splitting PDF)
+│   └── java_lambda/ (Java Lambda for merging PDFs)
+├── docker_autotag/ (Python Docker image for ECS task)
+└── javascript_docker/ (JavaScript Docker image for ECS task)
+|__ client_credentials.json (The client id and client secret id for adobe)
+```
 
-## Monitoring and Logs
+## Setup and Deployment
 
-CloudWatch Logs and Metrics are configured for all Lambda functions, ECS tasks, and Step Functions. The logs are visible in the CloudWatch console, and a custom dashboard is created to track the status of files and the overall workflow.
+1. **Set Up CDK Environment**:
+   - Bootstrap your AWS environment for CDK (run only once per AWS account/region):
+     ```
+     cdk bootstrap
+     ```
 
-## Contributions
+2. **Clone the Repository**:
+   - Clone this repository containing the CDK code, Docker configurations, and Lambda functions.
 
-Contributions are welcome! Please submit pull requests or open issues for any changes or enhancements.
+3. **Set Up Your Environment**:
+   - Configure AWS CLI with your AWS account credentials:
+     ```
+     aws configure
+     ```
 
+4. **Initialize CDK**:
+   - Ensure your environment is initialized:
+     ```
+     cdk init app --language python
+     ```
+
+5. **Create Adobe API Credentials**:
+   - Create a file called `client_credentials.json` in the root directory with the following structure:
+     ```json
+     {
+       "client_credentials": {
+         "PDF_SERVICES_CLIENT_ID": "<Your client ID here>",
+         "PDF_SERVICES_CLIENT_SECRET": "<Your secret ID here>"
+       }
+     }
+     ```
+
+6. **Upload Credentials to Secrets Manager**:
+   - Run this command in the terminal of the project:
+     ```
+     aws secretsmanager create-secret \
+         --name /myapp/client_credentials \
+         --description "Client credentials for PDF services" \
+         --secret-string file://client_credentials.json
+     ```
+
+7. **Connect to ECR**:
+   - Ensure Docker Desktop is running, then execute:
+     ```
+     aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
+     ```
+
+8. **Deploy the CDK Stack**:
+   - Deploy the stack to AWS:
+     ```
+     cdk deploy
+     ```
+
+## Usage
+
+Once the infrastructure is deployed:
+
+1. Create a `pdf/` folder in the S3 bucket created by the CDK stack.
+2. Upload a PDF file to the `pdf/` folder in the S3 bucket.
+3. The process will automatically trigger and start processing the PDF.
+
+## Monitoring
+
+- Use the CloudWatch dashboards created by the stack to monitor the progress and performance of the PDF processing pipeline.
+
+## Troubleshooting
+
+If you encounter any issues during setup or deployment, please check the following:
+
+- Ensure all prerequisites are correctly installed and configured.
+- Verify that your AWS credentials have the necessary permissions.
+- Check CloudWatch logs for any error messages in the Lambda functions or ECS tasks.
+
+For further assistance, please open an issue in this repository.
+
+## Contributing
+
+Contributions to this project are welcome. Please fork the repository and submit a pull request with your changes
