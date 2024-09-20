@@ -13,7 +13,7 @@ Before running the AWS CDK stack, ensure the following are installed and configu
    - Sign up for an Adobe enterprise account or request a trial
    - Obtain the necessary API credentials (key, secret, etc.)
 
-3. **Python**: The project likely uses Python for some components.
+3. **Python**:
    - Install Python (version 3.7 or later)
    - Set up a virtual environment for the project
 
