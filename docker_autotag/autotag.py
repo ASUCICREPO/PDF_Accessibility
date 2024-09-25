@@ -99,7 +99,7 @@ def save_to_s3(filename, bucket_name, folder_name,file_basename, file_key):
         s3.upload_fileobj(data, bucket_name, f"temp/{file_basename}/{folder_name}/COMPLIANT_{file_key}")
 
 
-def get_secret():
+def get_secret(basefilename):
     """
     Retrieves client credentials from AWS Secrets Manager.
     
@@ -121,7 +121,8 @@ def get_secret():
             SecretId=secret_name
         )
     except ClientError as e:
-        raise e
+        logging.info(f'Filename : {basefilename} | Error: {e}')
+        
 
     secret = get_secret_value_response['SecretString']
     secret_dict = json.loads(secret)
@@ -167,9 +168,10 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
     from adobe.pdfservices.operation.pdfjobs.params.autotag_pdf.autotag_pdf_params import AutotagPDFParams
     from adobe.pdfservices.operation.pdfjobs.result.autotag_pdf_result import AutotagPDFResult
 
-    client_id, client_secret = get_secret()
+    
     base_filename = os.path.basename(pdf_path)
     filename = "COMPLIANT_" + base_filename
+    client_id, client_secret = get_secret(base_filename)
 
     reader = PdfReader(pdf_path)
     writer = PdfWriter()
@@ -192,9 +194,9 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
     class AutotagPDFWithOptions:
         def __init__(self):
             try:
-                file = open(filename, 'rb')
-                input_stream = file.read()
-                file.close()
+                with open(filename, 'rb') as file:
+                    input_stream = file.read()
+                
 
                 # Initial setup, create credentials instance
                 credentials = ServicePrincipalCredentials(
@@ -262,9 +264,8 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
     class ExtractTextTableInfoWithFiguresTablesRenditionsFromPDF:
         def __init__(self):
             try:
-                file = open(filename, 'rb')
-                input_stream = file.read()
-                file.close()
+                with open(filename, 'rb') as file:
+                    input_stream = file.read()
 
                 # Initial setup, create credentials instance
                 credentials = ServicePrincipalCredentials(
@@ -341,7 +342,8 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
     extract_to = f"output/zipfile/{filename}"
     unzip_file(zip_path, extract_to)
 
-    data = json.loads(open(f"output/zipfile/{filename}/structuredData.json").read())
+    with open(f"output/zipfile/{filename}/structuredData.json") as file:
+        data = json.load(file)
 
     # Extract bookmarks based on headings found in the structured data
     bookmarks = [(element["Text"], element["Page"] + 1) for element in data["elements"] if re.search(r'H[1-6]', element["Path"])]
@@ -433,6 +435,7 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
         logging.info(f'Filename : {filename} | Extracting the images from excel file...')
         # Load the workbook and the first sheet
         wb = openpyxl.load_workbook(file_path)
+        wb.close()
         sheet = wb["Figures"]
         logging.info(f'Filename : {filename} | Sheet: {sheet.title}')
         logging.info(f'Filename : {filename} | Number of images: {len(sheet._images)}')
@@ -510,6 +513,7 @@ def main():
         logging.info(f'Filename : {file_key} | Processing completed for pdf file')
     except Exception as e:
         logger.info(f"File: {file_base_name}, Status: Failed in First ECS task")
+        logger.info(f"Filename : {file_key} | Error: {e}")
         sys.exit(1)
         
 if __name__ == "__main__":

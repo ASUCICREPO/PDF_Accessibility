@@ -24,7 +24,7 @@ class PDFAccessibility(Stack):
         super().__init__(scope, construct_id, **kwargs)
 
         # S3 Bucket
-        bucket = s3.Bucket(self, "pdfaccessibilitybucket1")
+        bucket = s3.Bucket(self, "pdfaccessibilitybucket1", encryption=s3.BucketEncryption.S3_MANAGED, enforce_ssl=True)
     
 
         python_image_asset = ecr_assets.DockerImageAsset(self, "PythonImage",
@@ -199,7 +199,8 @@ class PDFAccessibility(Stack):
             environment={
                 'BUCKET_NAME': bucket.bucket_name  # this line sets the environment variable
             },
-             timeout=Duration.seconds(900)
+            timeout=Duration.seconds(900),
+            memory_size=1024
         )
 
         java_lambda.add_to_role_policy(cloudwatch_logs_policy)
@@ -233,7 +234,8 @@ class PDFAccessibility(Stack):
             runtime=lambda_.Runtime.PYTHON_3_10,
             handler='main.lambda_handler',
             code=lambda_.Code.from_docker_build("lambda/split_pdf"),
-            timeout=Duration.seconds(900)
+            timeout=Duration.seconds(900),
+            memory_size=1024
         )
 
         split_pdf_lambda.add_to_role_policy(cloudwatch_logs_policy)
@@ -258,7 +260,7 @@ class PDFAccessibility(Stack):
         split_pdf_lambda_log_group_name = f"/aws/lambda/{split_pdf_lambda.function_name}"
         java_lambda_log_group_name = f"/aws/lambda/{java_lambda.function_name}"
 
-        dashboard = cloudwatch.Dashboard(self, "PDFProcessingDashboard_test", dashboard_name="PDFProcessingDashboard_test",
+        dashboard = cloudwatch.Dashboard(self, "PDF_Processing_Dashboard", dashboard_name="PDF_Processing_Dashboard",
                                          variables=[cloudwatch.DashboardVariable(
                                             id="filename",
                                             type=cloudwatch.VariableType.PATTERN,

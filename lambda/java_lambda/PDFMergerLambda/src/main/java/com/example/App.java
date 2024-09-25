@@ -79,6 +79,7 @@ public class App implements RequestHandler<Map<String, Object>, String> {
         } catch (Exception e) {
             baseFileName = baseFileName.replace(".pdf", "");
             System.out.println("File: " + baseFileName + ", Status: Failed in Merging the PDF");
+            System.out.println(String.format("Filename: %s, File not found: %s", baseFileName, e.getMessage()));
             return "Failed to merge PDFs.";
         }
     }
