@@ -115,7 +115,10 @@ If you encounter any issues during setup or deployment, please check the followi
 
 - Ensure all prerequisites are correctly installed and configured.
 - Verify that your AWS credentials have the necessary permissions.
-- Check CloudWatch logs for any error messages in the Lambda functions or ECS tasks.
+- Check CloudWatch logs for any error messages in the Lambda functions or ECS tasks. 
+- If the CDK Deploy responds with: ` Python was not found; run without arguments to install from the Microsoft Store, or disable this shortcut from Settings > Manage App Execution Aliases.
+Subprocess exited with error 9009 `, try changing ` "app": "python3 app.py" ` to  ` "app": "python app.py" ` in the cdk.json file
+- If the CDK deploy responds with: ` Resource handler returned message: "The maximum number of addresses has been reached. ` request additional IPs from AWS. Go to https://us-east-1.console.aws.amazon.com/servicequotas/home/services/ec2/quotas and search for "IP". Then, choose "EC2-VPC Elastic IPs". Note the AWS region is included in the URL, change it to the region you are deploying into. Requests for additional IPs are usually completed within minutes.
 
 For further assistance, please open an issue in this repository.
 
