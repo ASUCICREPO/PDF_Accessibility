@@ -53,7 +53,10 @@ class PDFAccessibility(Stack):
             ]
         )
 
+
+
         # ECS Cluster
+
         cluster = ecs.Cluster(self, "FargateCluster", vpc=vpc)
 
         ecs_task_execution_role = iam.Role(self, "EcsTaskRole",
@@ -99,31 +102,34 @@ class PDFAccessibility(Stack):
                                                     removal_policy=cdk.RemovalPolicy.DESTROY)
         # ECS Task Definitions
         task_definition_1 = ecs.FargateTaskDefinition(self, "MyFirstTaskDef",
-                                                      memory_limit_mib=512,
+                                                      memory_limit_mib=1024,
                                                       cpu=256, execution_role=ecs_task_execution_role, task_role=ecs_task_role,
                                                      )
 
         container_definition_1 = task_definition_1.add_container("python_container",
                                                                   image=ecs.ContainerImage.from_registry(python_image_asset.image_uri),
-                                                                  memory_limit_mib=256,
+                                                                  memory_limit_mib=1024,
                                                                   logging=ecs.LogDrivers.aws_logs(
         stream_prefix="PythonContainerLogs",
         log_group=python_container_log_group,
     ))
 
         task_definition_2 = ecs.FargateTaskDefinition(self, "MySecondTaskDef",
-                                                      memory_limit_mib=512,
+                                                      memory_limit_mib=1024,
                                                       cpu=256, execution_role=ecs_task_execution_role, task_role=ecs_task_role,
                                                       )
 
         container_definition_2 = task_definition_2.add_container("javascript_container",
                                                                   image=ecs.ContainerImage.from_registry(javascript_image_asset.image_uri),
-                                                                  memory_limit_mib=256,
+                                                                  memory_limit_mib=1024,
                                                                    logging=ecs.LogDrivers.aws_logs(
         stream_prefix="JavaScriptContainerLogs",
         log_group=javascript_container_log_group
     ))
-
+        model_id_image = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+        model_id_link = 'us.anthropic.claude-3-haiku-20240307-v1:0'
+        model_arn_image = f'arn:aws:bedrock:{region}:{account_id}:inference-profile/{model_id_image}'
+        model_arn_link = f'arn:aws:bedrock:{region}:{account_id}:inference-profile/{model_id_link}'
         # ECS Tasks in Step Functions
         ecs_task_1 = tasks.EcsRunTask(self, "ECS RunTask",
                                       integration_pattern=sfn.IntegrationPattern.RUN_JOB,
@@ -145,6 +151,14 @@ class PDFAccessibility(Stack):
                                               tasks.TaskEnvironmentVariable(
                                                   name="S3_CHUNK_KEY",
                                                   value=sfn.JsonPath.string_at("$.chunk_key")
+                                              ),
+                                            tasks.TaskEnvironmentVariable(
+                                                  name="model_arn_image",
+                                                  value=model_arn_image
+                                              ),
+                                            tasks.TaskEnvironmentVariable(
+                                                  name="model_arn_link",
+                                                  value=model_arn_link
                                               ),
                                           ]
                                       )],

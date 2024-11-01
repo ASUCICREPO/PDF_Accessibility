@@ -65,18 +65,19 @@ function sleep(ms) {
  * 
  * @param {string} [prompt="generate alt text for this image"] - The prompt to guide the model in generating the alt text.
  * @param {Buffer} [imageBuffer=null] - The buffer containing the image data.
- * @param {string} [modelId="anthropic.claude-3-5-sonnet-20240620-v1:0"] - The ID of the Bedrock model to be used.
+ * @param {string} [modelId="anthropic.claude-3-5-sonnet-20241022-v2:0"] - The ID of the Bedrock model to be used.
  * @returns {Promise<Object>} - A promise that resolves with the model's response, including the generated alt text.
  * @throws {Error} - Throws an error if invoking the model fails.
  */
 const invokeModel = async (
     prompt = "generate alt text for this image",
     imageBuffer = null,
-    modelId = "anthropic.claude-3-5-sonnet-20240620-v1:0",
+    modelId = "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
 ) => {
     // Create a new Bedrock Runtime client instance.
     const client = new BedrockRuntimeClient({ region: "us-east-1" });
-
+    const model_arn_image = process.env.model_arn_image;
+    
     // Convert the image buffer to a base64-encoded string
     const inputImageBase64 = imageBuffer ? imageBuffer.toString('base64') : null;
 
@@ -182,16 +183,16 @@ async function generateAltText(imageObject, imageBuffer) {
  * The function sends a prompt to the model and returns the generated alt text describing the link's destination or purpose.
  * 
  * @param {string} [prompt="Generate alt text for this link"] - The prompt to guide the model in generating the alt text for the link.
- * @param {string} [modelId="anthropic.claude-3-5-sonnet-20240620-v1:0"] - The ID of the Bedrock model to be used.
+ * @param {string} [modelId="us.anthropic.claude-3-haiku-20240307-v1:0"] - The ID of the Bedrock model to be used.
  * @returns {Promise<string>} - A promise that resolves with the generated alt text for the link.
  * @throws {Error} - Throws an error if invoking the model fails.
  */
 const invokeModel_alt_text_links = async (
     prompt = "Generate alt text for this link",
-    modelId = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+    modelId = "us.anthropic.claude-3-haiku-20240307-v1:0"
 ) => {
     const client = new BedrockRuntimeClient({ region: "us-east-1" });
-
+    const model_arn_link = process.env.model_arn_link
     const body = {
         anthropic_version: "bedrock-2023-05-31",
         max_tokens: 2000,
@@ -236,7 +237,7 @@ const invokeModel_alt_text_links = async (
 async function generateAltTextForLink(url) {
     const prompt = `Generate WCAG 2.1-compliant alt text for a hyperlink. The alt text should describe the link's destination or purpose in a clear and concise manner. Example: "Link to YouTube video about PDF accessibility". The link URL is: ${url}`;
     try {
-        return await invokeModel_alt_text_links(prompt, "anthropic.claude-3-haiku-20240307-v1:0");
+        return await invokeModel_alt_text_links(prompt, "us.anthropic.claude-3-haiku-20240307-v1:0");
     } catch (error) {
         console.error(`Error generating alt text for link: ${error}`);
         throw error;
