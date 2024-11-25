@@ -10,9 +10,10 @@ def download_file_from_s3(bucket_name, file_key, local_path,filename):
 def save_to_s3(local_path, bucket_name, file_key):
     s3 = boto3.client('s3')
     save_path = f"result/COMPLIANT_{file_key}"
-    with open(filename, "rb") as data:
+    with open(local_path, "rb") as data:
         s3.upload_fileobj(data, bucket_name, save_path)
     return save_path
+    
 def set_custom_metadata(pdf_document,filename, title):
     # Set XML metadata for the PDF
     xmp_metadata = f'''<?xml version="1.0" encoding="UTF-8"?>
@@ -100,6 +101,7 @@ def generate_title(extracted_text):
     Using the following content extracted from the first two pages of a PDF document, generate a clear, concise, and descriptive title for the file. 
     The title should accurately summarize the primary focus of the document, be free of unnecessary jargon, and comply with WCAG 2.1 AA accessibility guidelines by being understandable and distinguishable.
     Context for title generation: {extracted_text}
+    Output only the title as the response and please please dont reply with anything else except the generated title.
     '''
     # Construct the request payload
     request_payload = {
@@ -122,33 +124,101 @@ def generate_title(extracted_text):
     generated_title = response['output']['message']['content'][0]['text']
     return generated_title.strip()
 
-
-
-
 def lambda_handler(event, context):
     import fitz
-    payload = event.get("Payload")
-    file_info = parse_payload(payload)
-    print(file_info)
-    file_name = file_info['merged_file_name']
-    local_path = f'/tmp/{file_name}'
-    download_file_from_s3(file_info['bucket'],file_info['merged_file_key'],local_path,file_info['merged_file_name'])
 
-    pdf_document = fitz.open(local_path)
-    extracted_text = extract_text_from_pdf(pdf_document)
-    print(extracted_text)
-    title = generate_title(extracted_text)
-    print(title)
-    set_custom_metadata(pdf_document,file_name,title)
-    pdf_document.saveIncr()
-    pdf_document.close()
-    save_path = save_to_s3(local_path, file_info['bucket'], file_info['merged_file_key'])
-    return {
-        "statusCode": 200,
-        "body": 
-        {
-            "bucket": file_info['bucket'],
-            "save_path": save_path,
-            "title": title
+    try:
+        payload = event.get("Payload")
+        file_info = parse_payload(payload)
+        print(f"(lambda_handler | Parsed file information: {file_info})")
+
+        file_name = file_info['merged_file_name']
+        local_path = f'/tmp/{file_name}'
+        download_file_from_s3(file_info['bucket'], file_info['merged_file_key'], local_path, file_info['merged_file_name'])
+
+        try:
+            pdf_document = fitz.open(local_path)
+        except Exception as e:
+            print(f"(lambda_handler | Failed to open PDF file {file_name}: {e})")
+            return {
+                "statusCode": 500,
+                "body": {
+                    "error": f"Failed to open PDF file {file_name}.",
+                    "details": f"{file_name} - {str(e)}"
+                }
+            }
+
+        try:
+            extracted_text = extract_text_from_pdf(pdf_document)
+            print(f"(lambda_handler | Extracted text: {extracted_text})")
+        except Exception as e:
+            print(f"(lambda_handler | Failed to extract text from PDF: {e})")
+            pdf_document.close()
+            return {
+                "statusCode": 500,
+                "body": {
+                    "error": "Failed to extract text from PDF.",
+                    "details": f"{file_name} - {str(e)}"
+                }
+            }
+
+        try:
+            title = generate_title(extracted_text)
+            print(f"(lambda_handler | Generated title: {title})")
+        except Exception as e:
+            print(f"(lambda_handler | Failed to generate title: {e})")
+            pdf_document.close()
+            return {
+                "statusCode": 500,
+                "body": {
+                    "error": "Failed to generate title.",
+                    "details": f"{file_name} - {str(e)}"
+                }
+            }
+
+        try:
+            set_custom_metadata(pdf_document, file_name, title)
+            pdf_document.saveIncr()
+            pdf_document.close()
+        except Exception as e:
+            print(f"(lambda_handler | Failed to set metadata or save PDF: {e})")
+            pdf_document.close()
+            return {
+                "statusCode": 500,
+                "body": {
+                    "error": "Failed to set metadata or save PDF.",
+                    "details": f"{file_name} - {str(e)}"
+                }
+            }
+
+        try:
+            save_path = save_to_s3(local_path, file_info['bucket'], file_name)
+            print(f"(lambda_handler | Saved file to S3 at: {save_path})")
+        except Exception as e:
+            print(f"(lambda_handler | Failed to save file to S3: {e})")
+            return {
+                "statusCode": 500,
+                "body": {
+                    "error": "Failed to save file to S3.",
+                    "details": f"{file_name} - {str(e)}"
+                }
+            }
+
+        return {
+            "statusCode": 200,
+            "body": {
+                "bucket": file_info['bucket'],
+                "save_path": save_path,
+                "title": title
+            }
         }
-    }
+    except Exception as e:
+        print(f"(lambda_handler | General error in lambda_handler: {e})")
+        return {
+            "statusCode": 500,
+            "body": {
+                "error": "An unexpected error occurred.",
+                "details": f"{file_name} - {str(e)}"
+            }
+        }
+
