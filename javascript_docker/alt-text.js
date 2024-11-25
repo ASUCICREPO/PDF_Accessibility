@@ -317,7 +317,6 @@ async function modifyPDF(zipped, bucketName, inputKey, outputKey, filebasename) 
                                 pdfObject.set(PDFName.of('Contents'), PDFString.of(altText));
                             });
                             linkProcessingPromises.push(altTextPromise);
-                            setTimeout(30000)
                         }
                     }
                     
@@ -425,7 +424,7 @@ async function startProcess() {
             } catch (error) {
                 logger.info(`Filename: ${filebasename} | Error: ${error}`);
             }
-            await sleep(30000);
+            await sleep(3000);
         }
 
         let defaultText = "No text available"; 

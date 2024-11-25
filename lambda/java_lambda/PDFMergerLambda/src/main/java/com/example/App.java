@@ -60,7 +60,7 @@ public class App implements RequestHandler<Map<String, Object>, String> {
 
         String baseFileName = pdfKeys.get(0).substring(pdfKeys.get(0).lastIndexOf('/') + 1).replaceAll("_chunk_\\d+", "");
         String mergedFilePath = "/tmp/merged_" + baseFileName;
-        String outputKey = "result/COMPLIANT_" + baseFileName;
+        String outputKey = String.format("temp/%s/merged_%s", baseFileName.replace(".pdf", ""), baseFileName);
 
         try {
             // Download PDFs from S3
@@ -75,7 +75,9 @@ public class App implements RequestHandler<Map<String, Object>, String> {
             uploadPDF(bucketName, outputKey, mergedFilePath, baseFileName);
           
             // return "PDFs merged successfully and uploaded to: " + outputKey;
-            return "PDFs merged successfully and uploaded to: " + outputKey;
+
+            return String.format("PDFs merged successfully.\nBucket: %s\nMerged File Key: %s\nMerged File Name: %s", 
+                             bucketName, outputKey, baseFileName);
         } catch (Exception e) {
             baseFileName = baseFileName.replace(".pdf", "");
             System.out.println("File: " + baseFileName + ", Status: Failed in Merging the PDF");
