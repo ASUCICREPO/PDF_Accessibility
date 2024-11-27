@@ -55,7 +55,7 @@ def parse_payload(payload):
 def extract_text_from_pdf(pdf_document):
     """
     Extracts text from the first page of a PDF. If the text on the first page
-    has fewer than 50 words, extracts text from the second page as well.
+    has fewer than 50 words, extracts text from the second page and third page as well.
 
     Args:
         file_path (str): Path to the PDF file.
@@ -75,12 +75,13 @@ def extract_text_from_pdf(pdf_document):
         else:
             # Extract text from the second page if the first page is insufficient
             second_page_text = pdf_document[1].get_text() if len(pdf_document) > 1 else ""
-            return first_page_text + "\n\n" + second_page_text
+            third_page_text = pdf_document[2].get_text() if len(pdf_document) > 2 else ""
+            return "\n\n".join([first_page_text, second_page_text, third_page_text]).strip()
     except Exception as e:
         return f"An error occurred: {e}"
 
 
-def generate_title(extracted_text):
+def generate_title(extracted_text,current_title):
     session = boto3.Session()
 
     # Retrieve the current region
@@ -101,11 +102,16 @@ def generate_title(extracted_text):
     
     client = boto3.client('bedrock-runtime', region_name=region)
     prompt = f'''
-    Using the following content extracted from the first two pages of a PDF document, generate a clear, concise, and descriptive title for the file. 
+    Using the following content extracted from the first two to three pages of a PDF document, generate a clear, concise, and descriptive title for the file. 
     The title should accurately summarize the primary focus of the document, be free of unnecessary jargon, and comply with WCAG 2.1 AA accessibility guidelines by being understandable and distinguishable.
+
+    Check the current title against the context of the extracted text. If you think the current title is good enough based on the context, reply with the current title and nothing else. Otherwise, generate a new title based on the provided context.
+
+    Current File Title: {current_title}
     Context for title generation: {extracted_text}
-    Output only the title as the response and please please dont reply with anything else except the generated title.
+    Output only the title as the response and please do not reply with anything else except the generated title.
     '''
+
     # Construct the request payload
     request_payload = {
         'modelId': model_id,
@@ -166,7 +172,7 @@ def lambda_handler(event, context):
             }
 
         try:
-            title = generate_title(extracted_text)
+            title = generate_title(extracted_text,file_name)
             print(f"(lambda_handler | Generated title: {title})")
         except Exception as e:
             print(f"(lambda_handler | Failed to generate title: {e})")
