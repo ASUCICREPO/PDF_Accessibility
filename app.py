@@ -202,8 +202,8 @@ class PDFAccessibility(Stack):
         map_state.iterator(ecs_task_1.next(ecs_task_2))
 
         cloudwatch_logs_policy = iam.PolicyStatement(
-   actions=["cloudwatch:PutMetricData"],  # Allow PutMetricData action
-            resources=["*"],  # All CloudWatch resources # All CloudWatch Logs resources
+                    actions=["cloudwatch:PutMetricData"],  # Allow PutMetricData action
+                    resources=["*"],  # All CloudWatch resources # All CloudWatch Logs resources
         )
         java_lambda = lambda_.Function(
             self, 'JavaLambda',
@@ -226,6 +226,41 @@ class PDFAccessibility(Stack):
                                       output_path=sfn.JsonPath.string_at("$.Payload"))
         bucket.grant_read_write(java_lambda)
         map_state.next(java_lambda_task)
+
+        # //
+
+        # Define the Add Title Lambda function
+        add_title_lambda = lambda_.Function(
+            self, 'AddTitleLambda',
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler='myapp.lambda_handler',
+            code=lambda_.Code.from_docker_build('lambda/add_title'),
+            timeout=Duration.seconds(900),
+            memory_size=1024,
+            architecture=lambda_.Architecture.ARM_64
+        )
+
+        # Grant the Lambda function read/write permissions to the S3 bucket
+        bucket.grant_read_write(add_title_lambda)
+
+        # Define the task to invoke the Add Title Lambda function
+        add_title_lambda_task = tasks.LambdaInvoke(
+            self, "Invoke Add Title Lambda",
+            lambda_function=add_title_lambda,
+            payload=sfn.TaskInput.from_object({
+                "Payload.$": "$"
+            })
+        )
+
+        # Chain the tasks in the state machine
+        java_lambda_task.next(add_title_lambda_task)
+
+        # Add the necessary policy to the Lambda function's role
+        add_title_lambda.add_to_role_policy(cloudwatch_logs_policy)
+        add_title_lambda.add_to_role_policy(iam.PolicyStatement(
+            actions=["bedrock:*"],  # Adjust based on the specific Bedrock actions required
+            resources=["*"],
+        ))
 
         log_group_stepfunctions = logs.LogGroup(self, "StepFunctionLogs",
             log_group_name="/aws/states/MyStateMachine_PDFAccessibility",
@@ -273,6 +308,7 @@ class PDFAccessibility(Stack):
         # Store log group names dynamically
         split_pdf_lambda_log_group_name = f"/aws/lambda/{split_pdf_lambda.function_name}"
         java_lambda_log_group_name = f"/aws/lambda/{java_lambda.function_name}"
+
 
         dashboard = cloudwatch.Dashboard(self, "PDF_Processing_Dashboard", dashboard_name="PDF_Processing_Dashboard",
                                          variables=[cloudwatch.DashboardVariable(

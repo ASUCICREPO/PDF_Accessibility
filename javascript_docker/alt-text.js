@@ -316,13 +316,14 @@ async function modifyPDF(zipped, bucketName, inputKey, outputKey, filebasename) 
                                 pdfObject.set(PDFName.of('Alt'), PDFString.of(altText));
                                 pdfObject.set(PDFName.of('Contents'), PDFString.of(altText));
                             });
-
                             linkProcessingPromises.push(altTextPromise);
                         }
                     }
+                    
                 }
                 
             }
+            
         });
         await Promise.all(linkProcessingPromises);
         // Step 3: Save the modified PDF locally
@@ -423,7 +424,7 @@ async function startProcess() {
             } catch (error) {
                 logger.info(`Filename: ${filebasename} | Error: ${error}`);
             }
-            await sleep(1000);
+            await sleep(3000);
         }
 
         let defaultText = "No text available"; 
