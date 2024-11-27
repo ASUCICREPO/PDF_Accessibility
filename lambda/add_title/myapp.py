@@ -19,10 +19,13 @@ def set_custom_metadata(pdf_document,filename, title):
     xmp_metadata = f'''<?xml version="1.0" encoding="UTF-8"?>
     <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
             xmlns:dc="http://purl.org/dc/elements/1.1/"
-            xmlns:xmp="http://ns.adobe.com/xap/1.0/">
+            xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+            xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/">
         <rdf:Description rdf:about=""
             xmlns:dc="http://purl.org/dc/elements/1.1/">
             <dc:title>{title}</dc:title>
+            <pdfuaid:part>1</pdfuaid:part>
+            <pdfuaid:conformance>B</pdfuaid:conformance>
         </rdf:Description>
     </rdf:RDF>
     '''
