@@ -17,12 +17,12 @@ from aws_cdk import (
     aws_secretsmanager as secretsmanager
 )
 from constructs import Construct
-
+import platform
 
 class PDFAccessibility(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
-
+        
         # S3 Bucket
         bucket = s3.Bucket(self, "pdfaccessibilitybucket1", encryption=s3.BucketEncryption.S3_MANAGED, enforce_ssl=True)
     
@@ -230,6 +230,13 @@ class PDFAccessibility(Stack):
         # //
 
         # Define the Add Title Lambda function
+        host_machine = platform.machine().lower()
+        print("Architecture of Machine:",host_machine)
+        if "arm" in host_machine:
+            lambda_arch = lambda_.Architecture.ARM_64
+        else:
+            lambda_arch = lambda_.Architecture.X86_64
+
         add_title_lambda = lambda_.Function(
             self, 'AddTitleLambda',
             runtime=lambda_.Runtime.PYTHON_3_12,
@@ -237,7 +244,8 @@ class PDFAccessibility(Stack):
             code=lambda_.Code.from_docker_build('lambda/add_title'),
             timeout=Duration.seconds(900),
             memory_size=1024,
-            architecture=lambda_.Architecture.ARM_64
+            # architecture=lambda_.Architecture.ARM_64
+            architecture=lambda_arch,
         )
 
         # Grant the Lambda function read/write permissions to the S3 bucket
