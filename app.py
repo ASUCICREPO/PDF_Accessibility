@@ -34,7 +34,6 @@ class PDFAccessibility(Stack):
         javascript_image_asset = ecr_assets.DockerImageAsset(self, "JavaScriptImage",
                                                              directory="javascript_docker",
                                                              platform=ecr_assets.Platform.LINUX_AMD64)
-        # VPC
         # VPC with Public and Private Subnets
         vpc = ec2.Vpc(self, "MyVpc",
             max_azs=2,
@@ -53,10 +52,7 @@ class PDFAccessibility(Stack):
             ]
         )
 
-
-
         # ECS Cluster
-
         cluster = ecs.Cluster(self, "FargateCluster", vpc=vpc)
 
         ecs_task_execution_role = iam.Role(self, "EcsTaskRole",
@@ -265,7 +261,7 @@ class PDFAccessibility(Stack):
         ))
 
         # Chain the tasks in the state machine
-        chain = map_state.next(java_lambda_task).next(add_title_lambda_task)
+        # chain = map_state.next(java_lambda_task).next(add_title_lambda_task)
         
         a11y_precheck = lambda_.Function(
             self,'accessibility_checker_before_remidiation',
@@ -293,7 +289,33 @@ class PDFAccessibility(Stack):
             output_path="$.Payload"
         )
 
+        a11y_postcheck = lambda_.Function(
+            self,'accessibility_checker_after_remidiation',
+            runtime=lambda_.Runtime.PYTHON_3_10,
+            handler='main.lambda_handler',
+            code=lambda_.Code.from_docker_build('lambda/accessability_checker_after_remidiation'),
+            timeout=Duration.seconds(900),
+            memory_size=512,
+            architecture=lambda_arch,
+        )
         
+        a11y_postcheck.add_to_role_policy(
+            iam.PolicyStatement(
+            actions=["secretsmanager:GetSecretValue"],
+            resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/*"]
+        ))
+        bucket.grant_read_write(a11y_postcheck)
+        a11y_postcheck.add_to_role_policy(cloudwatch_logs_policy)
+
+        a11y_postcheck_lambda_task = tasks.LambdaInvoke(
+            self, 
+            "a11y_postcheck",
+            lambda_function=a11y_postcheck,
+            payload=sfn.TaskInput.from_json_path_at("$"),
+            output_path="$.Payload"
+        )
+        
+        chain = map_state.next(java_lambda_task).next(add_title_lambda_task).next(a11y_postcheck_lambda_task)
 
         parallel_state = sfn.Parallel(self, "ParallelState",
                                       result_path="$.ParallelResults")
@@ -347,8 +369,8 @@ class PDFAccessibility(Stack):
         split_pdf_lambda_log_group_name = f"/aws/lambda/{split_pdf_lambda.function_name}"
         java_lambda_log_group_name = f"/aws/lambda/{java_lambda.function_name}"
         add_title_lambda_log_group_name = f"/aws/lambda/{add_title_lambda.function_name}"
-        accessibility_checker_log_group_name = f"/aws/lambda/{a11y_precheck.function_name}"
-
+        accessibility_checker_pre_log_group_name = f"/aws/lambda/{a11y_precheck.function_name}"
+        accessibility_checker_post_log_group_name = f"aws/lambda/{a11y_postcheck.function_name}"
 
 
         dashboard = cloudwatch.Dashboard(self, "PDF_Processing_Dashboard", dashboard_name="PDF_Processing_Dashboard",
