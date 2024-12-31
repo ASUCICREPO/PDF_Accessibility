@@ -27,7 +27,11 @@ def download_file_from_s3(bucket_name,file_key, save_path, local_path):
 def save_to_s3(bucket_name, file_key):
     s3 = boto3.client('s3')
     local_path = "/tmp/PDFAccessibilityChecker/result_after_remidiation.json"
-    bucket_save_path = f"temp/{file_key}/accessability-report/{file_key}_accessibility_report_after_remidiation.json"
+
+    file_key_without_extension = os.path.splitext(file_key)[0]
+    file_key_without_compliant = file_key_without_extension.replace("COMPLIANT_", "", 1)
+    
+    bucket_save_path = f"temp/{file_key_without_compliant}/accessability-report/{file_key_without_extension}_accessibility_report_after_remidiation.json"
     with open(local_path, "rb") as data:
         s3.upload_fileobj(data, bucket_name, bucket_save_path)
     print(f"Filename {file_key} | Uploaded {file_key} to {bucket_name} at path {bucket_save_path} after remidiation")
@@ -66,17 +70,29 @@ def get_secret(basefilename):
 
 def lambda_handler(event, context):
     print("Received event:", event)
-    s3_bucket = event.get('s3_bucket', None)
+    
+    # Extracting nested values from the event
+    payload = event.get('Payload', {})
+    body = payload.get('body', {})
+    s3_bucket = body.get('bucket')
+    save_path = body.get('save_path')
 
-    save_path = event.get('save_path', None)
-    print(save_path)   
+    # Validate inputs
+    if not s3_bucket or not save_path:
+        raise ValueError("Missing required inputs: 's3_bucket' or 'save_path'")
+
+    print(f"s3_bucket: {s3_bucket}, save_path: {save_path}")
+
+    # Extract file basename using regex
     pattern = r"COMPLIANT_[^/]*"
     match = re.search(pattern, save_path)
-    # Extracted value
-    file_basename = match.group(0) if match else None
+    if not match:
+        raise ValueError(f"Pattern '{pattern}' not found in save_path: {save_path}")
     
+    file_basename = match.group(0)
     print("File basename:", file_basename)
-    print("s3_bucket:", s3_bucket)
+
+
     local_path = f"/tmp/{file_basename}"
     download_file_from_s3(s3_bucket,file_basename ,save_path, local_path)
 
@@ -111,13 +127,15 @@ def lambda_handler(event, context):
         report_asset: CloudAsset = pdf_services_response.get_result().get_report()
         stream_report: StreamAsset = pdf_services.get_content(report_asset)
         output_file_path_json = create_json_output_file_path()
+        
         with open(output_file_path_json, "wb") as file:
             file.write(stream_report.get_input_stream())
+
         bucket_save_path = save_to_s3(s3_bucket, file_basename)
         print(f"Filename : {file_basename} | Saved accessibility report to {bucket_save_path}")
 
     except (ServiceApiException, ServiceUsageException, SdkException) as e:
         print(f'Filename : {file_basename} | Exception encountered while executing operationat post accessability check: {e}')
         return f"Filename : {file_basename} | Exception encountered while executing operation at post accessability check: {e}"
-    return f"Filename : {file_basename} | Saved accessibility report to {output_file_path_json}"
+    return f"Filename : {file_basename} | Saved accessibility report to {bucket_save_path}"
     

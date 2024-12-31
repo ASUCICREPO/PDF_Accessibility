@@ -26,7 +26,8 @@ def download_file_from_s3(bucket_name,file_key, local_path):
 def save_to_s3(bucket_name, file_key):
     s3 = boto3.client('s3')
     local_path = "/tmp/PDFAccessibilityChecker/result_before_remidiation.json"
-    bucket_save_path = f"temp/{file_key}/accessability-report/{file_key}_accessibility_report_before_remidiation.json"
+    file_key_without_extension = os.path.splitext(file_key)[0]
+    bucket_save_path = f"temp/{file_key_without_extension}/accessability-report/{file_key_without_extension}_accessibility_report_before_remidiation.json"
     with open(local_path, "rb") as data:
         s3.upload_fileobj(data, bucket_name, bucket_save_path)
     print(f"Filename {file_key} | Uploaded {file_key} to {bucket_name} at path {bucket_save_path} before remidiation")
@@ -119,5 +120,5 @@ def lambda_handler(event, context):
     except (ServiceApiException, ServiceUsageException, SdkException) as e:
         print(f'Filename : {file_basename} | Exception encountered while executing operation: {e}')
         return f"Filename : {file_basename} | Exception encountered while executing operation: {e}"
-    return f"Filename : {file_basename} | Saved accessibility report to {output_file_path_json}"
+    return f"Filename : {file_basename} | Saved accessibility report to {bucket_save_path}"
     
