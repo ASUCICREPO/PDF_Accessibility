@@ -6,7 +6,7 @@ This project builds an AWS infrastructure using AWS CDK (Cloud Development Kit) 
 
 Before running the AWS CDK stack, ensure the following are installed and configured:
 
-1. **AWS Bedrock Access**  
+1. **AWS Bedrock Access**: Ensure your AWS account has access to the Claude Sonnet 3.5 V2 model in Amazon Bedrock.
    - [Request access to Amazon Bedrock](https://console.aws.amazon.com/bedrock/) through the AWS console if not already enabled.
 
 2. **Adobe API Access** - An enterprise-level contract or a trial account (For Testing) for Adobe's API is required.
@@ -22,16 +22,17 @@ Before running the AWS CDK stack, ensure the following are installed and configu
      .venv\Scripts\activate     # For Windows
      ```
 
-5. **AWS CLI**  
+5. **AWS CLI**: To interact with AWS services and set up credentials.
+
    - [Install AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html)  
 
-6. **AWS CDK**  
+6. **AWS CDK**: For defining cloud infrastructure in code.
    - [Install AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html)  
      ```bash
      npm install -g aws-cdk
      ```
 
-7. **Docker**  
+7. **Docker**: Required to build and run Docker images for the ECS tasks.  
    - [Install Docker](https://docs.docker.com/get-docker/)  
    - Verify installation:  
      ```bash
