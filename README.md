@@ -6,27 +6,41 @@ This project builds an AWS infrastructure using AWS CDK (Cloud Development Kit) 
 
 Before running the AWS CDK stack, ensure the following are installed and configured:
 
-1. **AWS Bedrock Access**: Ensure your AWS account has access to the Claude 3.5 model in Amazon Bedrock.
-   - Request access through the AWS console if not already enabled
+1. **AWS Bedrock Access**  
+   - [Request access to Amazon Bedrock](https://console.aws.amazon.com/bedrock/) through the AWS console if not already enabled.
 
-2. **Adobe API Access**: An enterprise-level contract or trial account for Adobe's API is required.
-   - Sign up for an Adobe enterprise account or request a trial
-   - Obtain the necessary API credentials (key, secret, etc.)
+2. **Adobe API Access** - An enterprise-level contract or a trial account (For Testing) for Adobe's API is required.
 
-3. **Python**:
-   - Install Python (version 3.7 or later)
-   - Set up a virtual environment for the project
+   - [Adobe PDF Services API](https://acrobatservices.adobe.com/dc-integration-creation-app-cdn/main.html) to obtain API credentials.
+   
+4. **Python (3.7 or later)**  
+   - [Download Python](https://www.python.org/downloads/)  
+   - [Set up a virtual environment](https://docs.python.org/3/library/venv.html)  
+     ```bash
+     python -m venv .venv
+     source .venv/bin/activate  # For macOS/Linux
+     .venv\Scripts\activate     # For Windows
+     ```
 
-4. **AWS CLI**: To interact with AWS services and set up credentials.
-   - Install AWS CLI
+5. **AWS CLI**  
+   - [Install AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html)  
 
-5. **AWS CDK**: For defining cloud infrastructure in code.
-   - Install AWS CDK
+6. **AWS CDK**  
+   - [Install AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html)  
+     ```bash
+     npm install -g aws-cdk
+     ```
 
-6. **Docker**: Required to build and run Docker images for the ECS tasks.
-   - Install Docker
+7. **Docker**  
+   - [Install Docker](https://docs.docker.com/get-docker/)  
+   - Verify installation:  
+     ```bash
+     docker --version
+     ```
 
-7. **AWS Account Permissions**: Ensure your AWS account has the necessary permissions to create and manage the required resources (S3, Lambda, Step Functions, ECS, ECR, CloudWatch, etc.)
+8. **AWS Account Permissions**  
+   - Ensure permissions to create and manage AWS resources like S3, Lambda, ECS, ECR, Step Functions, and CloudWatch.  
+   - [AWS IAM Policies and Permissions](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html)
 
 ## Directory Structure
 
