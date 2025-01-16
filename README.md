@@ -59,28 +59,21 @@ Ensure your project has the following structure:
 
 ## Setup and Deployment
 
-1. **Set Up CDK Environment**:
-   - Bootstrap your AWS environment for CDK (run only once per AWS account/region):
-     ```
-     cdk bootstrap
-     ```
-
-2. **Clone the Repository**:
+1. **Clone the Repository**:
    - Clone this repository containing the CDK code, Docker configurations, and Lambda functions.
-
-3. **Set Up Your Environment**:
+     
+2. **Set Up Your Environment**:
    - Configure AWS CLI with your AWS account credentials:
      ```
      aws configure
      ```
-
-4. **Initialize CDK**:
-   - Ensure your environment is initialized:
+3. **Set Up CDK Environment**:
+   - Bootstrap your AWS environment for CDK (run only once per AWS account/region):
      ```
-     cdk init app --language python
+     cdk bootstrap
      ```
-
-5. **Create Adobe API Credentials**:
+     
+4. **Create Adobe API Credentials**:
    - Create a file called `client_credentials.json` in the root directory with the following structure:
      ```json
      {
@@ -91,7 +84,7 @@ Ensure your project has the following structure:
      }
      ```
 
-6. **Upload Credentials to Secrets Manager**:
+5. **Upload Credentials to Secrets Manager**:
    - Run this command in the terminal of the project:
      ```
      aws secretsmanager create-secret \
@@ -100,13 +93,13 @@ Ensure your project has the following structure:
          --secret-string file://client_credentials.json
      ```
 
-7. **Connect to ECR**:
+6. **Connect to ECR**:
    - Ensure Docker Desktop is running, then execute:
      ```
      aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
      ```
 
-8. **Deploy the CDK Stack**:
+7. **Deploy the CDK Stack**:
    - Deploy the stack to AWS:
      ```
      cdk deploy
