@@ -94,7 +94,7 @@ def generate_title(extracted_text,current_title):
     account_id = sts_client.get_caller_identity()['Account']
 
     # Define the model name and version
-    model_name = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+    model_name = 'us.amazon.nova-pro-v1:0'
 
     # Construct the model_id
     model_id = f'arn:aws:bedrock:{region}:{account_id}:inference-profile/{model_name}'
@@ -131,7 +131,7 @@ def generate_title(extracted_text,current_title):
 
     # Extract and return the generated title
     generated_title = response['output']['message']['content'][0]['text']
-    return generated_title.strip()
+    return generated_title.strip('"')
 
 def lambda_handler(event, context):
     import fitz

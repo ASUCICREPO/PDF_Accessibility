@@ -1,9 +1,10 @@
-{ 
+{
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.632.0",
     "@aws-sdk/client-s3": "^3.633.0",
     "@aws-sdk/util-buffer-from": "^3.374.0",
     "aws-sdk": "^2.1678.0",
+    "better-sqlite3": "^11.8.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.6.82",
     "winston": "^3.14.2"

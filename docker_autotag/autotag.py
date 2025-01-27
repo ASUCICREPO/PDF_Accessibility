@@ -62,6 +62,7 @@ import logging
 import json
 import sys
 from botocore.exceptions import ClientError
+import sqlite3
 
 
 logging.basicConfig(level=logging.INFO)
@@ -420,9 +421,110 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
     from openpyxl.drawing.image import Image
     import logging
 
-    logging.basicConfig(level=logging.INFO)
 
-    def extract_images_from_excel(file_path, output_dir, s3_bucket, s3_folder):
+    logging.basicConfig(level=logging.INFO)
+    import zipfile
+    import os
+
+    def unzip_file(zip_file_path, extract_to):
+        # Check if the zip file exists
+        if not os.path.exists(zip_file_path):
+            raise FileNotFoundError(f"The file {zip_file_path} does not exist.")
+        
+        # Open the zip file
+        with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+            # Extract all the contents into the specified directory
+            zip_ref.extractall(extract_to)
+            print(f"Extracted all files to '{extract_to}'.")
+            
+    import os
+    import cv2
+    import numpy as np
+
+    def compare_image_to_folder(input_image_path, folder_path):
+        # Read the input image
+        input_image = cv2.imread(input_image_path)
+        if input_image is None:
+            raise FileNotFoundError(f"Input image '{input_image_path}' not found or not valid.")
+        
+        matched_images = []
+        
+        # Iterate through all files in the folder
+        for filename in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, filename)
+            
+            # Skip if not a file
+            if not os.path.isfile(file_path):
+                continue
+            
+            # Read the current image
+            folder_image = cv2.imread(file_path)
+            if folder_image is None:
+                continue
+            
+            # Check if the dimensions match
+            if input_image.shape != folder_image.shape:
+                continue  # Skip images with different dimensions
+            
+            # Compare the images pixel by pixel
+            difference = cv2.subtract(input_image, folder_image)
+            if not np.any(difference):  # If all values are zero, the images are identical
+                matched_images.append(file_path)
+        
+        return matched_images
+    def remove_prefix(text, prefix):
+        if text.startswith(prefix):
+            return text[len(prefix):]
+        return text
+    import os
+
+    def print_folders_and_files(folder_path):
+        try:
+            items = os.listdir(folder_path)
+            folders = []
+            files = []
+
+            for item in items:
+                item_path = os.path.join(folder_path, item)
+                if os.path.isdir(item_path):
+                    folders.append(item)
+                else:
+                    files.append(item)
+
+            print("Folders:")
+            for folder in folders:
+                print(folder)
+
+            print("\nFiles:")
+            for file in files:
+                print(file)
+
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+    # Example usage
+    
+    def extract_images_from_extract_api(filename, file_path, output_dir, s3_bucket, s3_folder):
+        unzip_file(file_path, output_dir)
+        
+        print_folders_and_files("output/ExtractTextInfoFromPDF")
+        with open(f"output/ExtractTextInfoFromPDF/{filename}/structuredData.json", "r") as file:
+            data = json.load(file)
+        by_page = {}
+
+        for ele in data["elements"]:
+            if "Page" in ele:
+                if ele["Page"] not in by_page:
+                    by_page[ele["Page"]] = []
+                by_page[ele["Page"]].append(ele)
+
+        
+        return by_page
+    
+    def natural_sort_key(file_name):
+        # Extract numbers from the file name using regex and convert to int for sorting
+        return [int(num) if num.isdigit() else num for num in re.split(r'(\d+)', file_name)]
+    def extract_images_from_excel(folder_path,file_path, output_dir, s3_bucket, s3_folder):
         """
         Extract images from an Excel file and save them to a directory and upload them to S3.
 
@@ -433,6 +535,9 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
         s3_folder (str): The S3 folder to upload the files to.
         """
         logging.info(f'Filename : {filename} | Extracting the images from excel file...')
+        pdf_document = pymupdf.open(pdf_path)
+        
+        
         # Load the workbook and the first sheet
         wb = openpyxl.load_workbook(file_path)
         wb.close()
@@ -449,11 +554,18 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
         logging.info(f'Filename : {filename} | DF loaded: {str(df)}')
         # Get the object IDs
         object_ids = df["Unnamed: 4"].dropna().values[1:]
-
+    
+        page_num_img = df["Figures and Alt Text (excludes artifacts and decorative images)"].dropna().values[2:].astype(int)
+        page_num_img = [int(i)-1 for i in page_num_img]
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
-
+        by_page = extract_images_from_extract_api(filename,f"output/ExtractTextInfoFromPDF/extract${filename}.zip", f"output/ExtractTextInfoFromPDF/{filename}", bucket_name, f"temp/{file_base_name}/output_autotag")
         image_paths = []
+        image_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp')
+        extract_apis_image_paths = [
+            os.path.join(folder_path, f)
+            for f in sorted(os.listdir(folder_path), key=natural_sort_key)
+        ]
         logging.info(f'Filename : {filename} | Sheet: {sheet} , Sheet Images: {sheet._images}')
         # Loop through all images in the sheet
         for idx, img in enumerate(sheet._images):
@@ -466,7 +578,10 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
             with open(img_path, 'wb') as f:
                 f.write(img._data())
             logging.info(f'Filename : {filename} | Image {idx + 1} saved as {img_path}')
-
+        image_paths = [
+            os.path.join(output_dir, f)
+            for f in sorted(os.listdir(output_dir), key=natural_sort_key)
+        ]
         # Initialize the S3 client
         s3 = boto3.client('s3')
         logging.info(f'Filename : {filename} | Image Paths: {image_paths}')
@@ -476,14 +591,67 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
             logging.info(f'Filename : {filename} | Uploaded image to S3')
         # Write the object IDs and image paths to a text file
         logging.info(f'Filename : {filename} | Object IDs: {object_ids} : Image Paths: {image_paths}')
- 
-        with open(os.path.join(output_dir, "temp_images_data.txt"), "w") as f:
-            for objid, img_path in zip(object_ids, image_paths):
-                f.write(f"{objid} {os.path.basename(img_path)}\n")
+
+        
+        
+        db_path = os.path.join(output_dir, "temp_images_data.db")
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS image_data (
+                objid TEXT,
+                img_path TEXT,
+                prev TEXT,
+                current TEXT,
+                next TEXT,
+                context TEXT
+            )
+        """)
+        
+        for objid, img_path, pg_num, ext_img_path in zip(object_ids, image_paths, page_num_img, extract_apis_image_paths):
+            context = """"""
+            
+         
+            for ele in by_page[pg_num]:
+                if "Text" in ele: 
+                    context += ele["Text"]
+                if "filePaths" in ele:
+                    print("img_path", img_path, "ext_img_path", ext_img_path, "ele filepath", ele["filePaths"])
+                    if len(ele["filePaths"]) ==1:
+                        if ele["filePaths"][0].split("/")[-1] == ext_img_path.split("/")[-1]:
+                            context +=  "<IMAGE INTERESTED> " + os.path.basename(img_path) + " </IMAGE INTERESTED> "
+                        else:
+                            context += "<OTHER IMAGE> " + ele["filePaths"][0].split("/")[-1] + " </OTHER IMAGE> "
+                
+            print("context", context)
+            cursor.execute("""
+                INSERT INTO image_data (objid, img_path, context)
+                VALUES (?, ?, ?)
+            """, (
+                objid,
+                os.path.basename(img_path),
+                context
+            ))
+
+        conn.commit()
+        conn.close()
+        # with open(os.path.join(output_dir, "temp_images_data.txt"), "w") as f:
+        #     for objid, img_path, pg_num in zip(object_ids, image_paths, page_num_img):
+        #         logging.info(f"here in this for loop:{objid}, {img_path, pg_num} ")
+        #         pages_content = {"prev": "", "current": f"{pdf_document[pg_num].get_text()}", "next": ""}
+        #         if pg_num > 0:
+        #             pages_content["prev"] = pdf_document[pg_num - 1].get_text()
+                
+        #         if pg_num < len(pdf_document) - 1:
+        #             pages_content["next"] = pdf_document[pg_num + 1].get_text()
+                
+        #         # Serialize the pages_content dictionary to JSON
+        #         pages_content_json = json.dumps(pages_content)
+        #         f.write(f"{objid} {os.path.basename(img_path)} {pages_content_json}\n")
 
         # Upload the text file to S3
-        s3.upload_file(os.path.join(output_dir, "temp_images_data.txt"), s3_bucket, f'{s3_folder}/{file_key}_temp_images_data.txt')
-    extract_images_from_excel(f"output/AutotagPDF/{filename}.xlsx", "output/zipfile/images", bucket_name, f"temp/{file_base_name}/output_autotag")
+        s3.upload_file(os.path.join(output_dir, "temp_images_data.db"), s3_bucket, f'{s3_folder}/{file_key}_temp_images_data.db')
+    extract_images_from_excel(f"output/ExtractTextInfoFromPDF/{filename}/figures",f"output/AutotagPDF/{filename}.xlsx", "output/zipfile/images", bucket_name, f"temp/{file_base_name}/output_autotag")
 def main():
     """
     Main function that coordinates the downloading, processing, and uploading of PDF files and associated content.

@@ -1,19 +1,26 @@
-# Use an official Node.js runtime as the base image
-FROM node:14
+# Use an official Node.js runtime with a newer version as the base image
+FROM node:18
 
-# Set the working directory in the container to /app
+# Set the working directory in the container
 WORKDIR /app
+
+# Install required system dependencies for building native modules
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3 \
+    libsqlite3-dev
 
 # Copy package.json and package-lock.json to the working directory
 COPY package*.json ./
 
-# Install any needed packages specified in package.json
-RUN npm install
+# Install dependencies (force better-sqlite3 to build from source if necessary)
+RUN npm install --build-from-source
+
+# Set environment variables
 ENV AWS_REGION="us-east-1"
-# Bundle the app source inside the Docker image
-# (Make sure you have a .dockerignore file to avoid copying node_modules)
+
+# Copy the rest of the application source code
 COPY . .
 
-
 # Define the command to run the app
-CMD [ "node", "alt-text.js" ]
+CMD ["node", "alt-text.js"]

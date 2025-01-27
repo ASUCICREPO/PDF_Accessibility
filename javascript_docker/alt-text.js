@@ -38,6 +38,7 @@ const stream = require('stream');
 const { promisify } = require('util');
 const path = require('path');
 const { PDFDocument, PDFName, PDFDict, PDFString } = require('pdf-lib');
+const Database = require('better-sqlite3');
 
 const pipeline = promisify(stream.pipeline);
 
@@ -72,7 +73,6 @@ function sleep(ms) {
 const invokeModel = async (
     prompt = "generate alt text for this image",
     imageBuffer = null,
-    modelId = "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
 ) => {
     // Create a new Bedrock Runtime client instance.
     const client = new BedrockRuntimeClient({ region: "us-east-1" });
@@ -82,47 +82,52 @@ const invokeModel = async (
     const inputImageBase64 = imageBuffer ? imageBuffer.toString('base64') : null;
 
     // Prepare the payload for the model.
-    const body = {
-        anthropic_version: "bedrock-2023-05-31",
-        max_tokens: 2000,
-        temperature: 0,
-        messages: [
-            {
-                role: "user",
-                content: [
-                    ...(inputImageBase64
-                        ? [
-                            {
-                                type: "image",
-                                source: {
-                                    type: "base64",
-                                    media_type: "image/png", 
-                                    data: inputImageBase64,
-                                },
-                            },
-                        ]
-                        : []),
-                    {
-                        type: "text",
-                        text: prompt,
-                    },
-                ],
-            },
+    const payload = {
+        system: [
+          {
+            text: "You are an intelligent assistant capable of analyzing images and answering questions about them."
+          }
         ],
-    };
+        messages: [
+          {
+            role: "user", // First turn should always be from the user
+            content: [
+              {
+                text: prompt // Add your prompt about the image here
+              },
+              {
+                image: {
+                  format: "png", // Specify the format of the image (e.g., jpeg, png)
+                  source: {
+                    bytes: inputImageBase64 // Include the Base64-encoded image data
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        inferenceConfig: {
+          max_new_tokens: 1000, // Adjust as needed (default is dynamic)
+          temperature: 0.7, // Default temperature for randomness
+          top_p: 0.9, // Default top-p sampling value
+          top_k: 50, // Default top-k sampling value
+          stopSequences: [] // Optional stop sequences if needed
+        },
+      };
 
     // Invoke the model with the payload and wait for the response.
     const command = new InvokeModelCommand({
+        modelId: "amazon.nova-pro-v1:0", // Replace with your model ID
         contentType: "application/json",
-        body: JSON.stringify(body),
-        modelId,
-    });
+        accept: "application/json",
+        body: JSON.stringify(payload)
+      });
     const apiResponse = await client.send(command);
 
     // Decode and return the response(s)
-    const decodedResponseBody = new TextDecoder().decode(apiResponse.body);
+    const decodedResponseBody = new TextDecoder("utf-8").decode(apiResponse.body);
     const responseBody = JSON.parse(decodedResponseBody);
-    return responseBody;
+    return responseBody.output.message;
 };
 
 /**
@@ -135,6 +140,10 @@ const invokeModel = async (
  * @throws {Error} - Throws an error if generating the alt text fails.
  */
 async function generateAltText(imageObject, imageBuffer) {
+    logger.info(`imageObject in generate alt text function: ${imageObject.id}`);
+    logger.info(`imageObject in generate alt text function: ${imageObject.context_json.context}`);
+
+    
     const prompt = `Generate WCAG 2.1-compliant alt text for an image embedded in a PDF document. The output must be in strict JSON format as follows:
     {“${imageObject.id}“: “Alternative text”}
     Follow these guidelines to create appropriate and effective alt text:
@@ -161,11 +170,29 @@ async function generateAltText(imageObject, imageBuffer) {
     2. “ASU’s Sun Devil head logo, symbolizing school spirit and athletic pride”
     3. “Print the course schedule for Fall 2024 semester”
     4. “Contact ASU support for assistance”
-    Remember:
-    - Provide only the JSON output with no additional explanation
-    - Do not use unnecessary phrases like “Certainly!” or “Here’s the alt text:”
-    - If you’re unsure about specific details, focus on describing what you can clearly determine from the context provided
-    Now, based on the information given and these guidelines, generate the appropriate alt text in the required JSON format.`;
+    
+    YOU MUST FOLLOW EACH INSTRUCTION STRICTLY:
+    - <INSTRUCTION>Provide only the JSON output with no additional explanation</INSTRUCTION>
+    - <INSTRUCTION>Do not use unnecessary phrases like “Certainly!” or “Here’s the alt text:” </INSTRUCTION>
+    - <INSTRUCTION>If you’re unsure about specific details, focus on describing what you can clearly determine from the context provided</INSTRUCTION>
+   - <INSTRUCTION> MAKE SURE YOU DO NOT USE IMAGE NAME OR NUMBER IN THEIR AS ID IN THE JSON RESPONSE [STRICTLY] </INSTRUCTION>
+    - <INSTRUCTION> MAKE SURE YOU USE CONTENT TO IMPROVE THE QUALITY OF ALT TEXT AND NOT GENERATE THE SUMMARY OF CONTEXT IF IMAGE IS EMPTY OR NOT RELEVANT</INSTRUCTION>
+
+    <PAGE CONTENT AND CONTEXT INFORMATION>
+    The page content and image interested is provided below. This is the whole page content and wherever you see “<OTHER IMAGE>” tag, these are other images on the page. The main image is the one with the tag “<IMAGE INTERESTED>” [DO NOT USE THIS AS OBJECT ID IN THAT JSON I PREVIOSULY SAID]. 
+    NOW YOU USE THIS CONTENT TO GENERATE ALT TEXT BY FOLLOWING THE BELOW STEPS:
+    - <STEP1> First determine where our image interested is in the page </STEP1>
+    - <STEP2> determine what is the relevant text for our image interested by thinking about its location in the whole page </STEP2>
+    - <STEP3> If there are multiple images in the same page then you must determine which is the relevant text for our image interested and which is NOT </STEP3>
+    - <STEP4> Always use name of a person if available in the page and make sure you DO NOT give wrong name to an image because there might be multiple names related to other images in the same page </STEP4>
+    - <STEP5> YOU MUST TAKE CARE OF DECIDING WHICH TEXT TO USE, interested image's before part of after part [STRICT STEP] </STEP5>
+    </PAGE CONTENT AND CONTEXT INFORMATION >
+    <ACTUAL CONTENT>
+    ${imageObject.context_json.context}
+    <ACTUAL CONTENT>
+
+    Now, based on the information given and these guidelines, generate the appropriate alt text in the required JSON format.
+    `;
 
     try {
         const response = await invokeModel(prompt, imageBuffer);
@@ -189,38 +216,50 @@ async function generateAltText(imageObject, imageBuffer) {
  */
 const invokeModel_alt_text_links = async (
     prompt = "Generate alt text for this link",
-    modelId = "us.anthropic.claude-3-haiku-20240307-v1:0"
+    modelId = "amazon.nova-pro-v1:0"
 ) => {
+    logger.info(`generating link alt text`);
     const client = new BedrockRuntimeClient({ region: "us-east-1" });
     const model_arn_link = process.env.model_arn_link
-    const body = {
-        anthropic_version: "bedrock-2023-05-31",
-        max_tokens: 2000,
-        temperature: 0,
-        messages: [
-            {
-                role: "user",
-                content: [
-                    {
-                        type: "text",
-                        text: prompt,
-                    },
-                ],
-            },
+    const payload = {
+        system: [
+          {
+            text: "You are an intelligent assistant capable of analyzing links and answering questions about them."
+          }
         ],
-    };
+        messages: [
+          {
+            role: "user", // First turn should always be from the user
+            content: [
+              {
+                text: prompt 
+              },
+            ]
+          }
+        ],
+        inferenceConfig: {
+          max_new_tokens: 1000, // Adjust as needed (default is dynamic)
+          temperature: 0.7, // Default temperature for randomness
+          top_p: 0.9, // Default top-p sampling value
+          top_k: 50, // Default top-k sampling value
+          stopSequences: [] // Optional stop sequences if needed
+        },
+      };
 
+    // Invoke the model with the payload and wait for the response.
     const command = new InvokeModelCommand({
+        modelId: "amazon.nova-pro-v1:0", // Replace with your model ID
         contentType: "application/json",
-        body: JSON.stringify(body),
-        modelId,
-    });
+        accept: "application/json",
+        body: JSON.stringify(payload)
+      });
 
     try {
         const apiResponse = await client.send(command);
         const decodedResponseBody = new TextDecoder().decode(apiResponse.body);
         const responseBody = JSON.parse(decodedResponseBody);
-        return responseBody.content[0].text;
+        logger.info(`response of alt text: ${responseBody.output.message.content[0].text}`);
+        return responseBody.output.message.content[0].text;
     } catch (error) {
         console.error(`Error invoking model: ${error}`);
         throw error;
@@ -237,7 +276,7 @@ const invokeModel_alt_text_links = async (
 async function generateAltTextForLink(url) {
     const prompt = `Generate WCAG 2.1-compliant alt text for a hyperlink. The alt text should describe the link's destination or purpose in a clear and concise manner. Example: "Link to YouTube video about PDF accessibility". The link URL is: ${url}`;
     try {
-        return await invokeModel_alt_text_links(prompt, "us.anthropic.claude-3-haiku-20240307-v1:0");
+        return await invokeModel_alt_text_links(prompt, "amazon.nova-pro-v1:0");
     } catch (error) {
         console.error(`Error generating alt text for link: ${error}`);
         throw error;
@@ -288,6 +327,7 @@ async function modifyPDF(zipped, bucketName, inputKey, outputKey, filebasename) 
 
                 if (structType === '/Figure') {
                     Object.entries(zipped).forEach(([key, value]) => {
+                        logger.info(`Filename: ${filebasename} | Key: ${key}, Value: ${value}`);
                         if (key == pdfRef.objectNumber) {
                             if (value === 'artifact') {
                              
@@ -300,6 +340,7 @@ async function modifyPDF(zipped, bucketName, inputKey, outputKey, filebasename) 
                                 pdfObject.set(PDFName.of('Contents'), PDFString.of(newAltText));
                                 delete zipped[key];
                                 logger.info(`Filename: ${filebasename} | Alt text added:${newAltText}`);
+                                logger.info(`Filename: ${filebasename} | Alt text  for object number:${pdfRef.objectNumber} and key ${key}`);
                             }
                         }
                     });
@@ -309,7 +350,7 @@ async function modifyPDF(zipped, bucketName, inputKey, outputKey, filebasename) 
                     if (subType === '/Link') {
                         const action = pdfObject.lookup(PDFName.of('A'));
                         const url = action?.lookup(PDFName.of('URI'))?.value;
-
+                        logger.info(`Filename: ${filebasename} | URL of the link is: ${url}`);
                         if (url) {
                             console.log(`Processing URL: ${url}`);
                             const altTextPromise = generateAltTextForLink(url).then((altText) => {
@@ -362,7 +403,7 @@ async function modifyPDF(zipped, bucketName, inputKey, outputKey, filebasename) 
 async function startProcess() {
     
     const bucketName = process.env.S3_BUCKET_NAME;
-    const textFileKey = `${process.env.S3_FILE_KEY.split("/")[1]}/output_autotag/${process.env.S3_FILE_KEY.split("/").pop()}_temp_images_data.txt`;
+    const textFileKey = `${process.env.S3_FILE_KEY.split("/")[1]}/output_autotag/${process.env.S3_FILE_KEY.split("/").pop()}_temp_images_data.db`;
     const filebasename = process.env.S3_FILE_KEY.split("/")[1];
    
     logger.info(`Filename: ${filebasename} | Text File Key: ${textFileKey}, Bucket Name: ${bucketName}`);
@@ -384,20 +425,39 @@ async function startProcess() {
         });
         logger.info(`Filename: ${filebasename} | Chunks:${chunks}`);
         const fileBuffer = Buffer.concat(chunks);
-        const localFilePath = path.join(__dirname, `temp_images_data.txt`);
+        const localFilePath = path.join(__dirname, `temp_images_data.db`);
+        
         fs_1.writeFileSync(localFilePath, fileBuffer);
-        const data = await fs.readFile('temp_images_data.txt', 'utf8');
-        const lines = data.split('\n');
-        const splitLines = lines.map(line => line.split(' '));
-        splitLines.pop();
-        logger.info(`Filename: ${filebasename} | Split Lines: ${splitLines}`);
-        let imageObjects = splitLines.map(split => ({
-            id: split[0],
-            path: `temp/${process.env.S3_FILE_KEY.split("/")[1]}/output_autotag/images/${process.env.S3_FILE_KEY.split("/").pop()}_${split[1]}` // Path to images in S3
-        }));
-
+    
+        const db = new Database(localFilePath, { readonly: true });
+        let imageObjects = [];
+        // Query the database
+        try {
+            const rows = db.prepare('SELECT * FROM image_data').all();
+            imageObjects = rows.map((row) => {
+                const splitKey = process.env.S3_FILE_KEY.split('/');
+                return {
+                    id: row.objid,
+                    path: `temp/${splitKey[1]}/output_autotag/images/${splitKey.pop()}_${row.img_path}`,
+                    context_json: {
+                        context: row.context,
+                    },
+                };
+            });
+        } catch (err) {
+            console.error('Error querying the database:', err.message);
+        } finally {
+            // Close the database connection
+            db.close();
+        }
+        // const data = await fs.readFile('temp_images_data.txt', 'utf8');
+        // const lines = data.split('\n');
+        // const splitLines = lines.map(line => line.split(' '));
+        // splitLines.pop();
+        // logger.info(`Filename: ${filebasename} | Split Lines: ${splitLines}`);
+    
         let combinedResults = {};
-
+        logger.info(`Filename: ${filebasename} | imageObjects: ${imageObjects}`);
         for (const imageObject of imageObjects) {
             try {
                 const getObjectParams = {

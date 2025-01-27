@@ -12,7 +12,6 @@ docutils==0.20.1
 et-xmlfile==1.1.0
 etelemetry==0.3.1
 filelock==3.15.4
-fitz==0.0.1.dev2
 httplib2==0.22.0
 idna==3.7
 imagesize==1.4.1
@@ -33,8 +32,7 @@ pathlib==1.0.1
 prov==2.0.1
 pydot==3.0.1
 Pygments==2.18.0
-PyMuPDF==1.24.9
-PyMuPDFb==1.24.9
+PyMuPDF==1.25.1
 pyparsing==3.1.2
 pypdf==4.3.1
 python-dateutil==2.9.0.post0
@@ -63,3 +61,5 @@ tzdata==2024.1
 urllib3==2.2.2
 pdfservices-sdk==4.0.0
 pillow==10.4.0
+db-sqlite3==0.0.1
+opencv-python-headless
