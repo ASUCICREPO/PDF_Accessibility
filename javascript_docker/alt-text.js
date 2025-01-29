@@ -186,6 +186,14 @@ async function generateAltText(imageObject, imageBuffer) {
     - <STEP3> If there are multiple images in the same page then you must determine which is the relevant text for our image interested and which is NOT </STEP3>
     - <STEP4> Always use name of a person if available in the page and make sure you DO NOT give wrong name to an image because there might be multiple names related to other images in the same page </STEP4>
     - <STEP5> YOU MUST TAKE CARE OF DECIDING WHICH TEXT TO USE, interested image's before part of after part [STRICT STEP] </STEP5>
+
+    <IMPORTANT THING>IN CASES WHERE THERE IS TEXT ON BOTH SIDE OF OUR IMAGE INTERESTED YOU MUST LOOK AT THE OVERALL PAGE CONTENT AND DECIDE WHIHC ONE TO USE. ONE WAY TO 
+    ACHIEVE THIS MIGHT BE:
+    - <STEP 1> DTERMINE OTHER IMAGES AND TEXT ASSOCIATED WITH THEM </STEP 1>
+    - <STEP 2> THOSE TEXT ASSOCIATED MIGHT(BIG ASSUMPTION) NOT BE RELATED TO OUR IMAGE INTERESTED </STEP 2>
+    </IMPORTANT THING>
+
+    <FEEDBACK>YOU TEND TO MAKE MISTAKES WHERE THERE ARE MULTIPLE IMAGES AND IN BETWEEN THERE IS SMALL AMOUNT OF TEXT. IN THOSE CASE YOU ARE CHOOSING WRONG TEXT TO GENERATE ALT TEXT. YOU MUST MUST NOT MAKE THIS MISTAKE</FEEDBACK>
     </PAGE CONTENT AND CONTEXT INFORMATION >
     <ACTUAL CONTENT>
     ${imageObject.context_json.context}
@@ -274,9 +282,12 @@ const invokeModel_alt_text_links = async (
  * @throws {Error} - Throws an error if the model invocation fails.
  */
 async function generateAltTextForLink(url) {
-    const prompt = `Generate WCAG 2.1-compliant alt text for a hyperlink. The alt text should describe the link's destination or purpose in a clear and concise manner. Example: "Link to YouTube video about PDF accessibility". The link URL is: ${url}`;
+    const prompt = `Generate WCAG 2.1-compliant alt text for a hyperlink. The alt text should describe the link's destination or purpose in a clear and concise manner. Example: "Link to YouTube video about PDF accessibility".
+    The link URL is: ${url}. Follow the instructions provided to generate appropriate alt text:
+    1. Just give only alt text. do not give give any other word or phrases like "Here is the alt text" or "The alt text is" etc.
+    2. The alt text should be clear and concise, providing a brief description of the link's destination or purpose.`;
     try {
-        return await invokeModel_alt_text_links(prompt, "amazon.nova-pro-v1:0");
+        return await invokeModel_alt_text_links(prompt, "amazon.nova-lite-v1:0");
     } catch (error) {
         console.error(`Error generating alt text for link: ${error}`);
         throw error;
@@ -484,7 +495,7 @@ async function startProcess() {
             } catch (error) {
                 logger.info(`Filename: ${filebasename} | Error: ${error}`);
             }
-            await sleep(3000);
+            await sleep(10000);
         }
 
         let defaultText = "No text available"; 

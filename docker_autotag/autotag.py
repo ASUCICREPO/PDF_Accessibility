@@ -347,8 +347,19 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
         data = json.load(file)
 
     # Extract bookmarks based on headings found in the structured data
-    bookmarks = [(element["Text"], element["Page"] + 1) for element in data["elements"] if re.search(r'H[1-6]', element["Path"])]
-
+    # bookmarks = [(element["Text"], element["Page"] + 1) for element in data["elements"] if re.search(r'H[1-6]', element["Path"])]
+    
+    bookmarks = []
+    for element in data.get("elements", []):
+        path = element.get("Path", "")
+        if re.search(r'H[1-4]', path) and "Text" in element:
+            bookmarks.append((element["Text"], element["Page"] + 1))
+        else:
+            # Optional: Log elements without 'Text' or not matching headings
+            if "Text" not in element:
+                logging.debug(f"Element with ObjectID {element.get('ObjectID')} has no 'Text' key.")
+            if not re.search(r'H[1-4]', path):
+                logging.debug(f"Element with ObjectID {element.get('ObjectID')} does not match heading pattern.")
     def add_toc_to_pdf(pdf_document, toc_entries):
         # Create a list of toc entries in the format required by PyMuPDF
         toc_list = []
@@ -421,7 +432,7 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
     from openpyxl.drawing.image import Image
     import logging
 
-
+    import ast
     logging.basicConfig(level=logging.INFO)
     import zipfile
     import os
@@ -562,10 +573,8 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
         by_page = extract_images_from_extract_api(filename,f"output/ExtractTextInfoFromPDF/extract${filename}.zip", f"output/ExtractTextInfoFromPDF/{filename}", bucket_name, f"temp/{file_base_name}/output_autotag")
         image_paths = []
         image_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp')
-        extract_apis_image_paths = [
-            os.path.join(folder_path, f)
-            for f in sorted(os.listdir(folder_path), key=natural_sort_key)
-        ]
+        coordinates = df["Unnamed: 3"].dropna().values[1:]
+        parsed_cordinates = [ast.literal_eval(item) for item in coordinates]
         logging.info(f'Filename : {filename} | Sheet: {sheet} , Sheet Images: {sheet._images}')
         # Loop through all images in the sheet
         for idx, img in enumerate(sheet._images):
@@ -607,23 +616,23 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
                 context TEXT
             )
         """)
+        import math
         
-        for objid, img_path, pg_num, ext_img_path in zip(object_ids, image_paths, page_num_img, extract_apis_image_paths):
+        for objid, img_path, pg_num, c in zip(object_ids, image_paths, page_num_img, parsed_cordinates):
             context = """"""
             
-         
             for ele in by_page[pg_num]:
                 if "Text" in ele: 
                     context += ele["Text"]
                 if "filePaths" in ele:
-                    print("img_path", img_path, "ext_img_path", ext_img_path, "ele filepath", ele["filePaths"])
                     if len(ele["filePaths"]) ==1:
-                        if ele["filePaths"][0].split("/")[-1] == ext_img_path.split("/")[-1]:
+                        if abs(math.ceil(ele["attributes"]["BBox"][2]) - math.ceil(ele["attributes"]["BBox"][0]) - c[2]) <= 7 and abs(math.ceil(ele["attributes"]["BBox"][3]) - math.ceil(ele["attributes"]["BBox"][1]) - c[3]) <= 7 and abs(round(ele["attributes"]["BBox"][0]) - c[0]) <= 7 and abs(round(ele["attributes"]["BBox"][3]) - c[1]) <= 7:
                             context +=  "<IMAGE INTERESTED> " + os.path.basename(img_path) + " </IMAGE INTERESTED> "
                         else:
                             context += "<OTHER IMAGE> " + ele["filePaths"][0].split("/")[-1] + " </OTHER IMAGE> "
-                
-            print("context", context)
+            print(f"{True if '<IMAGE INTERESTED>' in context else False}")
+            print("context:", context)  
+            print(" ======================")
             cursor.execute("""
                 INSERT INTO image_data (objid, img_path, context)
                 VALUES (?, ?, ?)

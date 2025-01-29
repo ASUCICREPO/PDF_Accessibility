@@ -1,5 +1,5 @@
 # Use an official Node.js runtime with a newer version as the base image
-FROM node:18
+FROM node:20
 
 # Set the working directory in the container
 WORKDIR /app
@@ -10,11 +10,12 @@ RUN apt-get update && apt-get install -y \
     python3 \
     libsqlite3-dev
 
-# Copy package.json and package-lock.json to the working directory
+# Copy package.json and packa
+
 COPY package*.json ./
 
 # Install dependencies (force better-sqlite3 to build from source if necessary)
-RUN npm install --build-from-source
+RUN npm install 
 
 # Set environment variables
 ENV AWS_REGION="us-east-1"
