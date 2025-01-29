@@ -661,6 +661,7 @@ def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
         # Upload the text file to S3
         s3.upload_file(os.path.join(output_dir, "temp_images_data.db"), s3_bucket, f'{s3_folder}/{file_key}_temp_images_data.db')
     extract_images_from_excel(f"output/ExtractTextInfoFromPDF/{filename}/figures",f"output/AutotagPDF/{filename}.xlsx", "output/zipfile/images", bucket_name, f"temp/{file_base_name}/output_autotag")
+    
 def main():
     """
     Main function that coordinates the downloading, processing, and uploading of PDF files and associated content.

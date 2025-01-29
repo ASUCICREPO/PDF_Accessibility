@@ -59,7 +59,7 @@ traits==6.3.2
 typing_extensions==4.12.2
 tzdata==2024.1
 urllib3==2.2.2
-pdfservices-sdk==4.0.0
+pdfservices-sdk==4.1.0
 pillow==10.4.0
 db-sqlite3==0.0.1
 opencv-python-headless
