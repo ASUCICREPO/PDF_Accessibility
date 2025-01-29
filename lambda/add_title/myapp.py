@@ -1,20 +1,79 @@
 import boto3
 import json
 import os
+import time
+import random
+import fitz  # PyMuPDF
 
-def download_file_from_s3(bucket_name, file_key, local_path,filename):
+# Helper function for exponential backoff and retry
+def exponential_backoff_retry(
+    func,
+    *args,
+    retries=3,
+    base_delay=1,
+    backoff_factor=2,
+    **kwargs
+):
+    """
+    Retries a given function using exponential backoff in case of exception.
+
+    :param func: The function (or method) to be executed.
+    :param args: Positional arguments to pass to the function.
+    :param retries: Maximum number of retries before failing.
+    :param base_delay: Initial delay (in seconds).
+    :param backoff_factor: Multiplicative factor by which the delay increases each retry.
+    :param kwargs: Keyword arguments to pass to the function.
+    :return: Whatever `func` returns if it succeeds.
+    :raises: The last exception if all retries fail.
+    """
+    attempt = 0
+    while True:
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            attempt += 1
+            if attempt >= retries:
+                print(f"[ExponentialBackoff] Exhausted retries for {func.__name__}. Error: {e}")
+                raise
+            sleep_time = base_delay * (backoff_factor ** (attempt - 1)) + random.uniform(0, 1)
+            print(f"[ExponentialBackoff] Attempt {attempt}/{retries} for {func.__name__} failed with error: {e}. "
+                  f"Sleeping for {sleep_time:.2f} seconds.")
+            time.sleep(sleep_time)
+
+
+def download_file_from_s3(bucket_name, file_key, local_path, filename):
     s3 = boto3.client('s3')
-    s3.download_file(bucket_name, file_key, local_path)
+    # Wrap the S3 download_file call with exponential_backoff_retry
+    exponential_backoff_retry(
+        s3.download_file,
+        bucket_name,
+        file_key,
+        local_path,
+        retries=3,
+        base_delay=1,
+        backoff_factor=2
+    )
     print(f"Filename: {filename}| Downloaded {file_key} from {bucket_name} to {local_path}")
+
 
 def save_to_s3(local_path, bucket_name, file_key):
     s3 = boto3.client('s3')
     save_path = f"result/COMPLIANT_{file_key}"
     with open(local_path, "rb") as data:
-        s3.upload_fileobj(data, bucket_name, save_path)
+        # Wrap the S3 upload_fileobj call with exponential_backoff_retry
+        exponential_backoff_retry(
+            s3.upload_fileobj,
+            data,
+            bucket_name,
+            save_path,
+            retries=3,
+            base_delay=1,
+            backoff_factor=2
+        )
     return save_path
-    
-def set_custom_metadata(pdf_document,filename, title):
+
+
+def set_custom_metadata(pdf_document, filename, title):
     # Set XML metadata for the PDF
     xmp_metadata = f'''<?xml version="1.0" encoding="UTF-8"?>
     <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
@@ -37,6 +96,7 @@ def set_custom_metadata(pdf_document,filename, title):
     pdf_document.set_metadata(current_metadata)
     print(f'Filename : {filename} | Metadata updated for the PDF with Title: {title}')
 
+
 def parse_payload(payload):
     lines = payload.strip().split('\n')
     data = {}
@@ -55,15 +115,14 @@ def parse_payload(payload):
 def extract_text_from_pdf(pdf_document):
     """
     Extracts text from the first page of a PDF. If the text on the first page
-    has fewer than 50 words, extracts text from the second page and third page as well.
+    has fewer than 50 words, extracts text from the second and third pages as well.
 
     Args:
-        file_path (str): Path to the PDF file.
+        pdf_document (fitz.Document): PyMuPDF Document object.
 
     Returns:
         str: Extracted text from the relevant pages.
     """
-      
     try:
         # Extract text from the first page
         first_page_text = pdf_document[0].get_text() if len(pdf_document) > 0 else ""
@@ -73,7 +132,7 @@ def extract_text_from_pdf(pdf_document):
             # Return the first page text if it has enough words or if it's the only page
             return first_page_text
         else:
-            # Extract text from the second page if the first page is insufficient
+            # Extract text from the second and third pages if the first page is insufficient
             second_page_text = pdf_document[1].get_text() if len(pdf_document) > 1 else ""
             third_page_text = pdf_document[2].get_text() if len(pdf_document) > 2 else ""
             return "\n\n".join([first_page_text, second_page_text, third_page_text]).strip()
@@ -81,25 +140,26 @@ def extract_text_from_pdf(pdf_document):
         return f"An error occurred: {e}"
 
 
-def generate_title(extracted_text,current_title):
+def generate_title(extracted_text, current_title):
     session = boto3.Session()
 
-    # Retrieve the current region
+    # Retrieve the current region and account ID (wrapped in exponential_backoff_retry for safety)
     region = session.region_name
 
-    # Create an STS client
     sts_client = session.client('sts')
-
-    # Retrieve the account ID
-    account_id = sts_client.get_caller_identity()['Account']
+    account_id = exponential_backoff_retry(
+        sts_client.get_caller_identity,
+        retries=3,
+        base_delay=1,
+        backoff_factor=2
+    )['Account']
 
     # Define the model name and version
     model_name = 'us.amazon.nova-pro-v1:0'
-
     # Construct the model_id
     model_id = f'arn:aws:bedrock:{region}:{account_id}:inference-profile/{model_name}'
-    print(model_id)
-    
+    print(f"(generate_title) Model ID: {model_id}")
+
     client = boto3.client('bedrock-runtime', region_name=region)
     prompt = f'''
     Using the following content extracted from the first two to three pages of a PDF document, generate a clear, concise, and descriptive title for the file. 
@@ -123,19 +183,22 @@ def generate_title(extracted_text,current_title):
         ]
     }
 
-    # Send the request to the Converse API
-    response = client.converse(
+    # Wrap the Bedrock client call with exponential_backoff_retry
+    response = exponential_backoff_retry(
+        client.converse,
         modelId=model_id,
-        messages=request_payload['messages']
+        messages=request_payload['messages'],
+        retries=3,
+        base_delay=1,
+        backoff_factor=2
     )
 
     # Extract and return the generated title
     generated_title = response['output']['message']['content'][0]['text']
     return generated_title.strip('"')
 
-def lambda_handler(event, context):
-    import fitz
 
+def lambda_handler(event, context):
     try:
         payload = event.get("Payload")
         file_info = parse_payload(payload)
@@ -172,7 +235,7 @@ def lambda_handler(event, context):
             }
 
         try:
-            title = generate_title(extracted_text,file_name)
+            title = generate_title(extracted_text, file_name)
             print(f"(lambda_handler | Generated title: {title})")
         except Exception as e:
             print(f"(lambda_handler | Failed to generate title: {e})")
@@ -227,7 +290,6 @@ def lambda_handler(event, context):
             "statusCode": 500,
             "body": {
                 "error": "An unexpected error occurred.",
-                "details": f"{file_name} - {str(e)}"
+                "details": f"Filename: {file_info.get('merged_file_name','Unknown')} - {str(e)}"
             }
         }
-

@@ -87,13 +87,13 @@ class PDFAccessibility(Stack):
         # Grant S3 read/write access to ECS Task Role
         bucket.grant_read_write(ecs_task_execution_role)
         # Create ECS Task Log Groups explicitly
-        python_container_log_group = logs.LogGroup(self, "PythonContainerLogGroup_test_naman",
-                                                log_group_name="/ecs/MyFirstTaskDef/PythonContainerLogGroup_test_naman",
+        python_container_log_group = logs.LogGroup(self, "PythonContainerLogGroup",
+                                                log_group_name="/ecs/MyFirstTaskDef/PythonContainerLogGroup",
                                                 retention=logs.RetentionDays.ONE_WEEK,
                                                 removal_policy=cdk.RemovalPolicy.DESTROY)
 
-        javascript_container_log_group = logs.LogGroup(self, "JavaScriptContainerLogGroup_test_naman",
-                                                    log_group_name="/ecs/MySecondTaskDef/JavaScriptContainerLogGroup_test_naman",
+        javascript_container_log_group = logs.LogGroup(self, "JavaScriptContainerLogGroup",
+                                                    log_group_name="/ecs/MySecondTaskDef/JavaScriptContainerLogGroup",
                                                     retention=logs.RetentionDays.ONE_WEEK,
                                                     removal_policy=cdk.RemovalPolicy.DESTROY)
         # ECS Task Definitions
@@ -322,8 +322,8 @@ class PDFAccessibility(Stack):
         parallel_state.branch(chain)
         parallel_state.branch(a11y_precheck_lambda_task)
 
-        log_group_stepfunctions = logs.LogGroup(self, "StepFunctionLogs_test_naman",
-            log_group_name="/aws/states/MyStateMachine_PDFAccessibility_test_naman",
+        log_group_stepfunctions = logs.LogGroup(self, "StepFunctionLogs",
+            log_group_name="/aws/states/MyStateMachine_PDFAccessibility",
             retention=logs.RetentionDays.ONE_WEEK,
             removal_policy=cdk.RemovalPolicy.DESTROY
         )
@@ -373,7 +373,7 @@ class PDFAccessibility(Stack):
         accessibility_checker_post_log_group_name = f"aws/lambda/{a11y_postcheck.function_name}"
 
 
-        dashboard = cloudwatch.Dashboard(self, "PDF_Processing_Dashboard", dashboard_name="PDF_Processing_Dashboard_test_naman",
+        dashboard = cloudwatch.Dashboard(self, "PDF_Processing_Dashboard", dashboard_name="PDF_Processing_Dashboard",
                                          variables=[cloudwatch.DashboardVariable(
                                             id="filename",
                                             type=cloudwatch.VariableType.PATTERN,
@@ -439,5 +439,5 @@ class PDFAccessibility(Stack):
         )
 
 app = cdk.App()
-PDFAccessibility(app, "PDFAccessibilityTestNaman")
+PDFAccessibility(app, "PDFAccessibility")
 app.synth()
