@@ -167,6 +167,17 @@ Once the infrastructure is deployed:
 
 - Use the CloudWatch dashboards created by the stack to monitor the progress and performance of the PDF processing pipeline.
 
+## Limitations
+
+- This solution does not remediate corrupted PDFs.
+
+- It can process scanned PDFs, but the output accuracy is approximately 80%.
+
+- It does not remediate fillable forms.
+
+- It does not handle color selection/contrast adjustments.
+
+
 ## Troubleshooting
 
 If you encounter any issues during setup or deployment, please check the following:

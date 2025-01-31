@@ -537,55 +537,6 @@ def create_sqlite_db(by_page,filename,images_output_dir,object_ids, image_paths,
     s3.upload_file(os.path.join(images_output_dir, "temp_images_data.db"), bucket_name, f'{s3_folder_autotag}/{file_key}_temp_images_data.db')
     logging.info(f'Filename : {filename} | Uploaded SQLite DB to S3')
     
-def pdf_processing(pdf_path, file_base_name, file_key, bucket_name):
-    """
-    Processes the downloaded PDF file, adds TOC, custom metadata, and extracts text, tables, and images.
-    
-    Args:
-        pdf_path (str): Path to the downloaded PDF file.
-        file_base_name (str): The base name of the file.
-        file_key (str): The key of the file in the S3 bucket.
-        bucket_name (str): The S3 bucket name.
-    """
-
-    base_filename = os.path.basename(pdf_path)
-    filename = "COMPLIANT_" + base_filename
-    client_id, client_secret = get_secret(base_filename)
-
-    add_viewer_preferences(pdf_path, filename)
-
-    autotag_pdf_with_options(filename, client_id, client_secret)
-
-    extract_api(filename, client_id, client_secret)
-
-    extract_api_zip_path = f"output/ExtractTextInfoFromPDF/extract${filename}.zip"
-    extract_to = f"output/zipfile/{filename}"
-    unzip_file(filename,extract_api_zip_path,extract_to)
-
-    with open(f"output/zipfile/{filename}/structuredData.json") as file:
-        data = json.load(file)
-
-    # Extract bookmarks based on headings found in the structured data
-    # bookmarks = [(element["Text"], element["Page"] + 1) for element in data["elements"] if re.search(r'H[1-6]', element["Path"])]
-    
-    pdf_document = pymupdf.open(filename)
-
-    # Add TOC entries
-    add_toc_to_pdf(filename,pdf_document,data)
-
-    pdf_document.saveIncr()
-    pdf_document.close()
-    save_to_s3(filename, bucket_name, "output_autotag",file_base_name, file_key)
-
-    logging.info(f"PDF saved with updated metadata and TOC. File location: COMPLIANT_{file_key}")
-
-    figure_path = f"output/ExtractTextInfoFromPDF/{filename}/figures"
-    autotag_report_path = f"output/AutotagPDF/{filename}.xlsx"
-    images_output_dir = "output/zipfile/images"
-    bucket_name, 
-    s3_folder_autotag = f"temp/{file_base_name}/output_autotag"
-    extract_images_from_excel(filename,figure_path,autotag_report_path,images_output_dir,bucket_name,s3_folder_autotag,file_key)
-
 
 def main():
     """
@@ -606,7 +557,43 @@ def main():
         
         # Download the file from S3
         download_file_from_s3(bucket_name,file_base_name, file_key, local_file_path)
-        pdf_processing(local_file_path, file_base_name,file_key, bucket_name)
+
+        base_filename = os.path.basename(local_file_path)
+        filename = "COMPLIANT_" + base_filename
+
+        client_id, client_secret = get_secret(base_filename)
+
+        add_viewer_preferences(local_file_path, filename)
+
+        autotag_pdf_with_options(filename, client_id, client_secret)
+
+        extract_api(filename, client_id, client_secret)
+
+        extract_api_zip_path = f"output/ExtractTextInfoFromPDF/extract${filename}.zip"
+        extract_to = f"output/zipfile/{filename}"
+        unzip_file(filename,extract_api_zip_path,extract_to)
+
+        with open(f"output/zipfile/{filename}/structuredData.json") as file:
+            data = json.load(file)
+
+        pdf_document = pymupdf.open(filename)
+
+        # Add TOC entries
+        add_toc_to_pdf(filename,pdf_document,data)
+
+        pdf_document.saveIncr()
+        pdf_document.close()
+        save_to_s3(filename, bucket_name, "output_autotag",file_base_name, file_key)
+
+        logging.info(f"PDF saved with updated metadata and TOC. File location: COMPLIANT_{file_key}")
+
+        figure_path = f"output/ExtractTextInfoFromPDF/{filename}/figures"
+        autotag_report_path = f"output/AutotagPDF/{filename}.xlsx"
+        images_output_dir = "output/zipfile/images"
+
+        s3_folder_autotag = f"temp/{file_base_name}/output_autotag"
+        extract_images_from_excel(filename,figure_path,autotag_report_path,images_output_dir,bucket_name,s3_folder_autotag,file_key)
+        
         logging.info(f'Filename : {file_key} | Processing completed for pdf file')
     except Exception as e:
         logger.info(f"File: {file_base_name}, Status: Failed in First ECS task")

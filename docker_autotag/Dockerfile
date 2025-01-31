@@ -19,8 +19,6 @@ RUN mkdir -p /output/AutotagPDF \
 # Upgrade pip and install Python dependencies
 RUN python -m pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
-# Reinstall PyMuPDF to ensure compatibility
-RUN pip install --force-reinstall pymupdf
 
 # Verify that the application files are present
 RUN ls -la /app
