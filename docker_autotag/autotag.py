@@ -55,9 +55,6 @@ in structured formats. It handles compliance with accessibility standards and en
 and related content.
 """
 
-import math
-    
-import cv2
 import numpy as np
 import pandas as pd
 import openpyxl
@@ -73,7 +70,6 @@ import sqlite3
 import pymupdf
 import logging
 import os
-from datetime import datetime
 import json
 import re
 import zipfile
@@ -88,8 +84,7 @@ from adobe.pdfservices.operation.pdf_services import PDFServices, ClientConfig
 from adobe.pdfservices.operation.pdfjobs.jobs.extract_pdf_job import ExtractPDFJob
 from adobe.pdfservices.operation.pdfjobs.params.extract_pdf.extract_element_type import ExtractElementType
 from adobe.pdfservices.operation.pdfjobs.params.extract_pdf.extract_pdf_params import ExtractPDFParams
-from adobe.pdfservices.operation.pdfjobs.params.extract_pdf.extract_renditions_element_type import \
-    ExtractRenditionsElementType
+from adobe.pdfservices.operation.pdfjobs.params.extract_pdf.extract_renditions_element_type import ExtractRenditionsElementType
 from adobe.pdfservices.operation.pdfjobs.result.extract_pdf_result import ExtractPDFResult
 from adobe.pdfservices.operation.pdfjobs.jobs.autotag_pdf_job import AutotagPDFJob
 from adobe.pdfservices.operation.pdfjobs.params.autotag_pdf.autotag_pdf_params import AutotagPDFParams
@@ -342,43 +337,6 @@ def set_language_comprehend(filename,data,pdf_document):
     # Set the language in the PDF metadata
     pdf_document.set_language(dominant_language['LanguageCode'])
     logging.info(f'Filename : {filename} | Language set to {dominant_language["LanguageCode"]}')
-'''
-def compare_image_to_folder(input_image_path, folder_path):
-    # Read the input image
-    input_image = cv2.imread(input_image_path)
-    if input_image is None:
-        raise FileNotFoundError(f"Input image '{input_image_path}' not found or not valid.")
-    
-    matched_images = []
-    
-    # Iterate through all files in the folder
-    for filename in os.listdir(folder_path):
-        file_path = os.path.join(folder_path, filename)
-        
-        # Skip if not a file
-        if not os.path.isfile(file_path):
-            continue
-        
-        # Read the current image
-        folder_image = cv2.imread(file_path)
-        if folder_image is None:
-            continue
-        
-        # Check if the dimensions match
-        if input_image.shape != folder_image.shape:
-            continue  # Skip images with different dimensions
-        
-        # Compare the images pixel by pixel
-        difference = cv2.subtract(input_image, folder_image)
-        if not np.any(difference):  # If all values are zero, the images are identical
-            matched_images.append(file_path)
-    
-    return matched_images
-def remove_prefix(text, prefix):
-    if text.startswith(prefix):
-        return text[len(prefix):]
-    return text
-'''
 
 def print_folders_and_files(folder_path):
     try:
@@ -424,74 +382,68 @@ def extract_images_from_extract_api(filename):
 def natural_sort_key(filename):
         # Extract numbers from the file name using regex and convert to int for sorting
         return [int(num) if num.isdigit() else num for num in re.split(r'(\d+)', filename)]
-def extract_images_from_excel(filename ,figure_path, autotag_report_path, images_output_dir, bucket_name, s3_folder_autotag,file_key):
-    
+
+# --- NEW: Bounding Box Conversion and Comparison Functions ---
+
+def convert_excel_bbox(excel_bbox):
     """
-    Extract images from an Excel file and save them to a directory and upload them to S3.
-
-    Args:
-    file_path (str): Path to the Excel file.
-    output_dir (str): Directory to save the images.
-    s3_bucket (str): The S3 bucket to upload the files to.
-    s3_folder (str): The S3 folder to upload the files to.
+    Convert an Excel bounding box from (x, y, w, h) where y is the top coordinate 
+    into a PDF-like bounding box.
+    
+    Parameters:
+        excel_bbox (tuple): (x, y, w, h)
+            x: left coordinate,
+            y: top coordinate,
+            w: width,
+            h: height.
+            
+    Returns:
+        tuple: (left, bottom, width, height) where bottom = y - h.
     """
-    logging.info(f'Filename : {filename} | Extracting the images from excel file...')
-    # pdf_document = pymupdf.open(pdf_path)
-    
-    
-    # Load the workbook and the first sheet
-    wb = openpyxl.load_workbook(autotag_report_path)
-    wb.close()
-    sheet = wb["Figures"]
-    logging.info(f'Filename : {filename} | Sheet: {sheet.title}')
-    logging.info(f'Filename : {filename} | Number of images: {len(sheet._images)}')
-    
+    x, y, w, h = excel_bbox
+    bottom = y - h
+    return x, bottom, w, h
 
-    # Load the workbook
-    df = pd.read_excel(autotag_report_path, sheet_name="Figures")
-    logging.info(f'Filename : {filename} | DF loaded: {str(df)}')
-    # Get the object IDs
-    object_ids = df["Unnamed: 4"].dropna().values[1:]
-
-    page_num_img = df["Figures and Alt Text (excludes artifacts and decorative images)"].dropna().values[2:].astype(int)
-    page_num_img = [int(i)-1 for i in page_num_img]
+def bbox_diff(api_bbox, excel_bbox):
+    """
+    Compute the absolute differences between the API bbox and the Excel bbox.
     
-    os.makedirs(images_output_dir, exist_ok=True)
-
-    by_page = extract_images_from_extract_api(filename)
-    image_paths = []
-    image_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp')
-    coordinates = df["Unnamed: 3"].dropna().values[1:]
-    parsed_cordinates = [ast.literal_eval(item) for item in coordinates]
-    logging.info(f'Filename : {filename} | Sheet: {sheet} , Sheet Images: {sheet._images}')
-
-    # Loop through all images in the sheet
-    for idx, img in enumerate(sheet._images):
-        # Determine the image type and format
-        img_type = img.path.split('.')[-1]
-        img_path = os.path.join(images_output_dir, f'image_{idx + 1}.{img_type}')
-        image_paths.append(img_path)
+    API bbox is in the format [left, bottom, right, top] (PDF coordinates).
+    Excel bbox is provided as (x, y, w, h) where y is the top coordinate.
+    We first convert the Excel bbox.
     
-        # Save the image
-        with open(img_path, 'wb') as f:
-            f.write(img._data())
-        logging.info(f'Filename : {filename} | Image {idx + 1} saved as {img_path}')
-    image_paths = [
-        os.path.join(images_output_dir, f)
-        for f in sorted(os.listdir(images_output_dir), key=natural_sort_key)
-    ]
+    Returns:
+        tuple: (diff_width, diff_height, diff_left, diff_bottom)
+    """
+    # Round API values using PDF coordinate system (left, bottom, right, top)
+    api_left   = round(api_bbox[0])
+    api_bottom = round(api_bbox[1])
+    api_right  = round(api_bbox[2])
+    api_top    = round(api_bbox[3])
     
-    logging.info(f'Filename : {filename} | Image Paths: {image_paths}')
-    # Upload the images to S3
-    for img_path in image_paths:
-        s3.upload_file(img_path, bucket_name, f'{s3_folder_autotag}/images/{file_key}_{os.path.basename(img_path)}')
-        logging.info(f'Filename : {filename} | Uploaded image to S3')
-    # Write the object IDs and image paths to a text file
-    logging.info(f'Filename : {filename} | Object IDs: {object_ids} : Image Paths: {image_paths}')
+    api_width  = api_right - api_left
+    api_height = api_top - api_bottom
+    
+    # Convert the Excel bbox (x, y, w, h) where y is the top coordinate
+    excel_left, excel_bottom, excel_w, excel_h = convert_excel_bbox(excel_bbox)
+    
+    diff_width  = abs(api_width - excel_w)
+    diff_height = abs(api_height - excel_h)
+    diff_left   = abs(api_left - excel_left)
+    diff_bottom = abs(api_bottom - excel_bottom)
+    
+    return diff_width, diff_height, diff_left, diff_bottom
 
-    create_sqlite_db(by_page,filename,images_output_dir,object_ids, image_paths, page_num_img, parsed_cordinates,bucket_name, s3_folder_autotag,file_key)
+def is_bbox_match(api_bbox, excel_bbox, tol=7):
+    """
+    Returns True if the differences between the API bbox and the converted Excel bbox 
+    are all within the specified tolerance.
+    """
+    diff_width, diff_height, diff_left, diff_bottom = bbox_diff(api_bbox, excel_bbox)
+    return (diff_width <= tol and diff_height <= tol and
+            diff_left <= tol and diff_bottom <= tol)
 
-def create_sqlite_db(by_page,filename,images_output_dir,object_ids, image_paths, page_num_img, parsed_cordinates,bucket_name, s3_folder_autotag,file_key):
+def create_sqlite_db(by_page, filename, images_output_dir, object_ids, image_paths, page_num_img, parsed_cordinates, bucket_name, s3_folder_autotag, file_key):
     db_path = os.path.join(images_output_dir, "temp_images_data.db")
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -506,20 +458,85 @@ def create_sqlite_db(by_page,filename,images_output_dir,object_ids, image_paths,
         )
     """)
 
-    for objid, img_path, pg_num, c in zip(object_ids, image_paths, page_num_img, parsed_cordinates):
-        context = """"""
+    # To enforce one-to-one mapping, track assigned API elements.
+    assigned_candidates = set()
+
+    for objid, img_path, pg_num, excel_bbox in zip(object_ids, image_paths, page_num_img, parsed_cordinates):
+        context = ""
+        candidate = None
         
-        for ele in by_page[pg_num]:
-            if "Text" in ele: 
-                context += ele["Text"]
-            if "filePaths" in ele:
-                if len(ele["filePaths"]) ==1:
-                    if abs(math.ceil(ele["attributes"]["BBox"][2]) - math.ceil(ele["attributes"]["BBox"][0]) - c[2]) <= 7 and abs(math.ceil(ele["attributes"]["BBox"][3]) - math.ceil(ele["attributes"]["BBox"][1]) - c[3]) <= 7 and abs(round(ele["attributes"]["BBox"][0]) - c[0]) <= 7 and abs(round(ele["attributes"]["BBox"][3]) - c[1]) <= 7:
-                        context +=  "<IMAGE INTERESTED> " + os.path.basename(img_path) + " </IMAGE INTERESTED> "
-                    else:
-                        context += "<OTHER IMAGE> " + ele["filePaths"][0].split("/")[-1] + " </OTHER IMAGE> "
+        if pg_num not in by_page:
+            logging.warning(f"Page {pg_num} not found in API data for file {filename}.")
+            context = "No API data for this page."
+        else:
+            # Filter API elements on this page for candidates:
+            candidates = []
+            for ele in by_page[pg_num]:
+                # Enforce one-to-one mapping.
+                if id(ele) in assigned_candidates:
+                    logging.debug(f"Candidate {ele.get('ObjectID')} already assigned. Skipping.")
+                    continue
+                if "filePaths" not in ele:
+                    logging.debug(f"Candidate {ele.get('ObjectID')} has no filePaths. Skipping.")
+                    continue
+                
+                # Get only image file paths (ignore XLSX or non-image extensions)
+                paths = ele["filePaths"]
+                image_paths_list = [p for p in paths if p.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
+                if not image_paths_list:
+                    logging.debug(f"Candidate {ele.get('ObjectID')} has no image file paths (filtered out XLSX). Skipping.")
+                    continue
+
+                # Use the first image path for further matching.
+                candidate_image_path = image_paths_list[0]
+                
+                # Exclude if from tables directory (if desired).
+                if "tables" in candidate_image_path.lower():
+                    logging.debug(f"Candidate {ele.get('ObjectID')} is from a tables directory. Skipping.")
+                    continue
+
+                # Make sure there is a bounding box we can compare.
+                if "attributes" not in ele or "BBox" not in ele["attributes"]:
+                    logging.debug(f"Candidate {ele.get('ObjectID')} has no bounding box data. Skipping.")
+                    continue
+
+                # Check the bounding box difference.
+                # if is_bbox_match(ele["attributes"]["BBox"], excel_bbox, tol=7):
+                if is_bbox_match(ele["Bounds"], excel_bbox, tol=7):  
+                    # Log the detailed differences for this candidate.
+                    diff_width, diff_height, diff_left, diff_bottom = bbox_diff(ele["attributes"]["BBox"], excel_bbox)
+                    total_score = diff_width + diff_height + diff_left + diff_bottom
+                    logging.debug(f"Candidate {ele.get('ObjectID')} passed: diff_width={diff_width}, diff_height={diff_height}, diff_left={diff_left}, diff_bottom={diff_bottom}, total_score={total_score}")
+                    # Store the candidate image path for later use.
+                    ele["candidate_image_path"] = candidate_image_path
+                    # Append candidate along with its computed score.
+                    ele["score"] = total_score
+                    candidates.append(ele)
+                else:
+                    diff_width, diff_height, diff_left, diff_bottom = bbox_diff(ele["attributes"]["BBox"], excel_bbox)
+                    logging.debug(f"Candidate {ele.get('ObjectID')} rejected due to bbox differences: diff_width={diff_width}, diff_height={diff_height}, diff_left={diff_left}, diff_bottom={diff_bottom}")
+
+            # Decide which candidate to choose based on the number of matches.
+            if len(candidates) == 1:
+                candidate = candidates[0]
+            elif len(candidates) > 1:
+                candidate = min(candidates, key=lambda cand: cand["score"])
+            else:
+                candidate = None
+
+        # Build the context string based on candidate.
+        if candidate:
+            assigned_candidates.add(id(candidate))
+            candidate_text = candidate.get("Text", "")
+            candidate_filename = os.path.basename(candidate.get("candidate_image_path", candidate["filePaths"][0]))
+            context = (candidate_text + " " if candidate_text else "") + "<IMAGE INTERESTED> " + candidate_filename + " </IMAGE INTERESTED>"
+            logging.info(f"Candidate {candidate.get('ObjectID')} selected with score {candidate.get('score')}.")
+        else:
+            context = "No matching candidate found"
+            logging.info("No candidate attested for current Excel row.")
+
         print(f"{True if '<IMAGE INTERESTED>' in context else False}")
-        print("context:", context)  
+        print("context:", context)
         print(" ======================")
         cursor.execute("""
             INSERT INTO image_data (objid, img_path, context)
@@ -533,10 +550,71 @@ def create_sqlite_db(by_page,filename,images_output_dir,object_ids, image_paths,
     conn.commit()
     conn.close()
     logging.info(f'Filename : {filename} | SQLite DB created with image data')
-    # Upload the text file to S3
+    # Upload the SQLite DB to S3
     s3.upload_file(os.path.join(images_output_dir, "temp_images_data.db"), bucket_name, f'{s3_folder_autotag}/{file_key}_temp_images_data.db')
     logging.info(f'Filename : {filename} | Uploaded SQLite DB to S3')
+
+def extract_images_from_excel(filename, figure_path, autotag_report_path, images_output_dir, bucket_name, s3_folder_autotag, file_key):
+    """
+    Extract images from an Excel file and save them to a directory and upload them to S3.
+
+    Args:
+        filename (str): The filename (used for logging).
+        figure_path (str): Path to figures (unused in this snippet).
+        autotag_report_path (str): Path to the Excel file.
+        images_output_dir (str): Directory to save the images.
+        bucket_name (str): The S3 bucket.
+        s3_folder_autotag (str): The S3 folder for autotag output.
+        file_key (str): File key for S3 naming.
+    """
+    logging.info(f'Filename : {filename} | Extracting the images from excel file...')
     
+    # Load the workbook and get the sheet (Images are in the "Figures" sheet)
+    wb = openpyxl.load_workbook(autotag_report_path)
+    wb.close()
+    sheet = wb["Figures"]
+    logging.info(f'Filename : {filename} | Sheet: {sheet.title}')
+    logging.info(f'Filename : {filename} | Number of images: {len(sheet._images)}')
+    
+    # Load the workbook into a DataFrame for additional details.
+    df = pd.read_excel(autotag_report_path, sheet_name="Figures")
+    logging.info(f'Filename : {filename} | DF loaded: {str(df)}')
+    # Get the object IDs
+    object_ids = df["Unnamed: 4"].dropna().values[1:]
+    # Get page numbers for images (adjusting for 0-indexing)
+    page_num_img = df["Figures and Alt Text (excludes artifacts and decorative images)"].dropna().values[2:].astype(int)
+    page_num_img = [int(i)-1 for i in page_num_img]
+    
+    os.makedirs(images_output_dir, exist_ok=True)
+
+    by_page = extract_images_from_extract_api(filename)
+    image_paths = []
+    coordinates = df["Unnamed: 3"].dropna().values[1:]
+    parsed_cordinates = [ast.literal_eval(item) for item in coordinates]
+    logging.info(f'Filename : {filename} | Sheet: {sheet} , Sheet Images: {sheet._images}')
+
+    # Loop through all images in the sheet and save them locally.
+    for idx, img in enumerate(sheet._images):
+        img_type = img.path.split('.')[-1]
+        img_path = os.path.join(images_output_dir, f'image_{idx + 1}.{img_type}')
+        image_paths.append(img_path)
+        with open(img_path, 'wb') as f:
+            f.write(img._data())
+        logging.info(f'Filename : {filename} | Image {idx + 1} saved as {img_path}')
+    image_paths = [
+        os.path.join(images_output_dir, f)
+        for f in sorted(os.listdir(images_output_dir), key=natural_sort_key)
+    ]
+    
+    logging.info(f'Filename : {filename} | Image Paths: {image_paths}')
+    # Upload the images to S3
+    for img_path in image_paths:
+        s3.upload_file(img_path, bucket_name, f'{s3_folder_autotag}/images/{file_key}_{os.path.basename(img_path)}')
+        logging.info(f'Filename : {filename} | Uploaded image to S3')
+    logging.info(f'Filename : {filename} | Object IDs: {object_ids} : Image Paths: {image_paths}')
+
+    create_sqlite_db(by_page, filename, images_output_dir, object_ids, image_paths, page_num_img, parsed_cordinates, bucket_name, s3_folder_autotag, file_key)
+
 
 def main():
     """
