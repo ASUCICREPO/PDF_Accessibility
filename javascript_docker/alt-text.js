@@ -162,44 +162,43 @@ async function generateAltText(imageObject, imageBuffer) {
           - For complex images, summarize key data or direct to full information
        d) Decorative Images:
           - Use empty alt text: alt=“”
-    3. Output Guidelines:
+    3. Additional Equation-Specific Alt Text Guidance:
+       - When generating alt text for images containing equations, ensure that each symbol is explicitly spelled out to maximize clarity for assistive technology users.
+       - For example, rather than simply transcribing the equation “2(4y+1)=3y”, the alt text should read: “2 open parenthesis 4 y plus 1 close parenthesis equals 3 y.”
+    4. Output Guidelines:
        - Keep alt text short, clear, and relevant
        - Ensure it enhances accessibility for assistive technology users
-    Examples:
-    1. “Sun Devil Stadium with a lone runner on the track during early morning training”
-    2. “ASU’s Sun Devil head logo, symbolizing school spirit and athletic pride”
-    3. “Print the course schedule for Fall 2024 semester”
-    4. “Contact ASU support for assistance”
     
     YOU MUST FOLLOW EACH INSTRUCTION STRICTLY:
     - <INSTRUCTION>Provide only the JSON output with no additional explanation</INSTRUCTION>
-    - <INSTRUCTION>Do not use unnecessary phrases like “Certainly!” or “Here’s the alt text:” </INSTRUCTION>
+    - <INSTRUCTION>Do not use unnecessary phrases like “Certainly!” or “Here’s the alt text:”</INSTRUCTION>
     - <INSTRUCTION>If you’re unsure about specific details, focus on describing what you can clearly determine from the context provided</INSTRUCTION>
-   - <INSTRUCTION> MAKE SURE YOU DO NOT USE IMAGE NAME OR NUMBER IN THEIR AS ID IN THE JSON RESPONSE [STRICTLY] </INSTRUCTION>
-    - <INSTRUCTION> MAKE SURE YOU USE CONTENT TO IMPROVE THE QUALITY OF ALT TEXT AND NOT GENERATE THE SUMMARY OF CONTEXT IF IMAGE IS EMPTY OR NOT RELEVANT</INSTRUCTION>
+    - <INSTRUCTION>MAKE SURE YOU DO NOT USE IMAGE NAME OR NUMBER AS THEIR ID IN THE JSON RESPONSE [STRICTLY]</INSTRUCTION>
+    - <INSTRUCTION>MAKE SURE YOU USE CONTENT TO IMPROVE THE QUALITY OF ALT TEXT AND NOT GENERATE A SUMMARY OF CONTEXT IF THE IMAGE IS EMPTY OR NOT RELEVANT</INSTRUCTION>
 
     <PAGE CONTENT AND CONTEXT INFORMATION>
-    The page content and image interested is provided below. This is the whole page content and wherever you see “<OTHER IMAGE>” tag, these are other images on the page. The main image is the one with the tag “<IMAGE INTERESTED>” [DO NOT USE THIS AS OBJECT ID IN THAT JSON I PREVIOSULY SAID]. 
-    NOW YOU USE THIS CONTENT TO GENERATE ALT TEXT BY FOLLOWING THE BELOW STEPS:
-    - <STEP1> First determine where our image interested is in the page </STEP1>
-    - <STEP2> determine what is the relevant text for our image interested by thinking about its location in the whole page </STEP2>
-    - <STEP3> If there are multiple images in the same page then you must determine which is the relevant text for our image interested and which is NOT </STEP3>
-    - <STEP4> Always use name of a person if available in the page and make sure you DO NOT give wrong name to an image because there might be multiple names related to other images in the same page </STEP4>
-    - <STEP5> YOU MUST TAKE CARE OF DECIDING WHICH TEXT TO USE, interested image's before part of after part [STRICT STEP] </STEP5>
+    The page content and image of interest is provided below. This is the whole page content and wherever you see “<OTHER IMAGE>” tag, these are other images on the page. The main image is the one with the tag “<IMAGE INTERESTED>” [DO NOT USE THIS AS THE OBJECT ID IN THE JSON].
+    NOW, USE THIS CONTENT TO GENERATE ALT TEXT BY FOLLOWING THE BELOW STEPS:
+    - <STEP1> First determine where our image of interest is on the page </STEP1>
+    - <STEP2> Determine what is the relevant text for our image of interest by considering its location in the whole page </STEP2>
+    - <STEP3> If there are multiple images on the same page, determine which text is relevant for our image of interest and which is not </STEP3>
+    - <STEP4> Always use the name of a person if available and ensure you DO NOT assign the wrong name to an image</STEP4>
+    - <STEP5> Decide carefully which text to use, considering the image’s before and after context [STRICT STEP]</STEP5>
 
-    <IMPORTANT THING>IN CASES WHERE THERE IS TEXT ON BOTH SIDE OF OUR IMAGE INTERESTED YOU MUST LOOK AT THE OVERALL PAGE CONTENT AND DECIDE WHIHC ONE TO USE. ONE WAY TO 
-    ACHIEVE THIS MIGHT BE:
-    - <STEP 1> DTERMINE OTHER IMAGES AND TEXT ASSOCIATED WITH THEM </STEP 1>
-    - <STEP 2> THOSE TEXT ASSOCIATED MIGHT(BIG ASSUMPTION) NOT BE RELATED TO OUR IMAGE INTERESTED </STEP 2>
+    <IMPORTANT THING>
+    In cases where there is text on both sides of our image of interest, analyze the overall page content and decide which portion to use. One method may be:
+    - <STEP 1> Identify other images and the text associated with them </STEP 1>
+    - <STEP 2> Assume that text associated with other images is not related to our image of interest </STEP 2>
     </IMPORTANT THING>
 
-    <FEEDBACK>YOU TEND TO MAKE MISTAKES WHERE THERE ARE MULTIPLE IMAGES AND IN BETWEEN THERE IS SMALL AMOUNT OF TEXT. IN THOSE CASE YOU ARE CHOOSING WRONG TEXT TO GENERATE ALT TEXT. YOU MUST MUST NOT MAKE THIS MISTAKE</FEEDBACK>
-    </PAGE CONTENT AND CONTEXT INFORMATION >
+    <FEEDBACK>
+    You tend to make mistakes when multiple images are present with small amounts of text in between. In such cases, choose the correct text for the alt text.
+    </FEEDBACK>
     <ACTUAL CONTENT>
     ${imageObject.context_json.context}
     <ACTUAL CONTENT>
 
-    Now, based on the information given and these guidelines, generate the appropriate alt text in the required JSON format.
+    Now, based on the above guidelines, generate the appropriate alt text in the required JSON format.
     `;
 
     try {
