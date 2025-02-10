@@ -127,6 +127,7 @@ const invokeModel = async (
     // Decode and return the response(s)
     const decodedResponseBody = new TextDecoder("utf-8").decode(apiResponse.body);
     const responseBody = JSON.parse(decodedResponseBody);
+    logger.info(`response of alt text: ${responseBody.output.message}`);
     return responseBody.output.message;
 };
 
@@ -145,14 +146,14 @@ async function generateAltText(imageObject, imageBuffer) {
 
     
     const prompt = `Generate WCAG 2.1-compliant alt text for an image embedded in a PDF document. The output must be in strict JSON format as follows:
-    {“${imageObject.id}“: “Alternative text”}
+    {"${imageObject.id}": "Alternative text"}
     Follow these guidelines to create appropriate and effective alt text:
     1. Image Description:
        - Describe the key elements of the image, including objects, people, scenes, and any visible text.
-       - Consider the image’s role within the PDF. What information or function does it provide?
+       - Consider the image's role within the PDF. What information or function does it provide?
     2. WCAG 2.1 Compliance:
        a) Text in Image:
-          - If duplicated nearby, use empty alt text: alt=“”
+          - If duplicated nearby, use empty alt text: alt=""
           - For functional text (e.g., icons), describe the function
           - Otherwise, include the exact text
        b) Functional Images:
@@ -161,29 +162,36 @@ async function generateAltText(imageObject, imageBuffer) {
           - Provide a concise description of essential information
           - For complex images, summarize key data or direct to full information
        d) Decorative Images:
-          - Use empty alt text: alt=“”
-    3. Additional Equation-Specific Alt Text Guidance:
-       - When generating alt text for images containing equations, ensure that each symbol is explicitly spelled out to maximize clarity for assistive technology users.
-       - For example, rather than simply transcribing the equation “2(4y+1)=3y”, the alt text should read: “2 open parenthesis 4 y plus 1 close parenthesis equals 3 y.”
+          - Use empty alt text: alt=""
+    3. Equation-Specific Alt Text Guidance:
+        - For images containing mathematical equations, spell out every symbol, number, and operator.
+        - Use explicit phrases such as "open parenthesis", "close parenthesis", "plus", "minus", "times", "divided by", "equals", "to the power of", etc.
+        - **Basic Example:** Instead of "2(4y+1)=3y", write "2 open parenthesis 4 y plus 1 close parenthesis equals 3 y."
+        - **Complex Example:** For an equation such as: f(t) = k1 e^(2t) sin(π t) + k2 t^3,
+            the alt text should be: "f open parenthesis t close parenthesis equals k1 e to the power of 2 t sin of pi t plus k2 t to the power of 3."
+   - **Power Notation Accuracy:** Ensure that any exponentiation is represented accurately. Always check that the power formatting is preserved correctly by using the phrase "to the power of" immediately after the base value, followed by the exponent. Do not drop, alter, or misplace any exponent values.
+   - **Subscript** Ensure that you properly describe subscript and superscript. For an example for euqation Fᵢ = mᵢ a², you should give the alt text as "F with subscript i end subscript equals m with subscript i end subscript a to the power of 2". Another example: Fₐ/ₓ = mₐ/ₓ a², you should give the alt text as "F with subscript a divided by x end subscript equals m with subscript a divided by x end subscript a to the power of 2 (Note: you will have a picture of the equation and not it might not the represented in the exact way as given in the examples here)"
+   - *Superscript*: Ensure that you properly describe the superscript. For example, Fₐ/ₓ^(n+1) = mᵢⱼ^k + a^b, you should give the alt text as "F with subscript a divided by x end subscript with superscript n plus 1 end superscript equals m with subscript i j end subscript with superscript k end superscript plus a with superscript b end superscript (Note: you will have a picture of the equation and not it might not the represented in the exact way as given in the examples here)."
+   - **Variable Names:** Always use the exact variable names and symbols as provided in the original equation. Do not substitute or alter them (for example, if the equation includes the lambda symbol, retain it exactly as given).
     4. Output Guidelines:
        - Keep alt text short, clear, and relevant
        - Ensure it enhances accessibility for assistive technology users
     
     YOU MUST FOLLOW EACH INSTRUCTION STRICTLY:
     - <INSTRUCTION>Provide only the JSON output with no additional explanation</INSTRUCTION>
-    - <INSTRUCTION>Do not use unnecessary phrases like “Certainly!” or “Here’s the alt text:”</INSTRUCTION>
-    - <INSTRUCTION>If you’re unsure about specific details, focus on describing what you can clearly determine from the context provided</INSTRUCTION>
+    - <INSTRUCTION>Do not use unnecessary phrases like "Certainly!" or "Here's the alt text:"</INSTRUCTION>
+    - <INSTRUCTION>If you're unsure about specific details, focus on describing what you can clearly determine from the context provided</INSTRUCTION>
     - <INSTRUCTION>MAKE SURE YOU DO NOT USE IMAGE NAME OR NUMBER AS THEIR ID IN THE JSON RESPONSE [STRICTLY]</INSTRUCTION>
     - <INSTRUCTION>MAKE SURE YOU USE CONTENT TO IMPROVE THE QUALITY OF ALT TEXT AND NOT GENERATE A SUMMARY OF CONTEXT IF THE IMAGE IS EMPTY OR NOT RELEVANT</INSTRUCTION>
 
     <PAGE CONTENT AND CONTEXT INFORMATION>
-    The page content and image of interest is provided below. This is the whole page content and wherever you see “<OTHER IMAGE>” tag, these are other images on the page. The main image is the one with the tag “<IMAGE INTERESTED>” [DO NOT USE THIS AS THE OBJECT ID IN THE JSON].
+    The page content and image of interest is provided below. This is the whole page content and wherever you see "<OTHER IMAGE>" tag, these are other images on the page. The main image is the one with the tag "<IMAGE INTERESTED>" [DO NOT USE THIS AS THE OBJECT ID IN THE JSON].
     NOW, USE THIS CONTENT TO GENERATE ALT TEXT BY FOLLOWING THE BELOW STEPS:
     - <STEP1> First determine where our image of interest is on the page </STEP1>
     - <STEP2> Determine what is the relevant text for our image of interest by considering its location in the whole page </STEP2>
     - <STEP3> If there are multiple images on the same page, determine which text is relevant for our image of interest and which is not </STEP3>
     - <STEP4> Always use the name of a person if available and ensure you DO NOT assign the wrong name to an image</STEP4>
-    - <STEP5> Decide carefully which text to use, considering the image’s before and after context [STRICT STEP]</STEP5>
+    - <STEP5> Decide carefully which text to use, considering the image's before and after context [STRICT STEP]</STEP5>
 
     <IMPORTANT THING>
     In cases where there is text on both sides of our image of interest, analyze the overall page content and decide which portion to use. One method may be:
@@ -193,6 +201,8 @@ async function generateAltText(imageObject, imageBuffer) {
 
     <FEEDBACK>
     You tend to make mistakes when multiple images are present with small amounts of text in between. In such cases, choose the correct text for the alt text.
+    *ALERT* Be careful when you are describing the subscript and superscripts in the alt text. Make sure you are describing them correctly. for subscripts you are making so many mistakes. you must firts decide if this is the part of subscript or not and then go ahead.
+    *ALERT* Always mention end of superscript and subscript, you are not describing end of subscript and superscript properly.
     </FEEDBACK>
     <ACTUAL CONTENT>
     ${imageObject.context_json.context}
@@ -446,6 +456,7 @@ async function startProcess() {
             const rows = db.prepare('SELECT * FROM image_data').all();
             imageObjects = rows.map((row) => {
                 const splitKey = process.env.S3_FILE_KEY.split('/');
+                logger.info(`thr path in the loop: temp/${splitKey[1]}/output_autotag/images/${row.img_path}`);
                 return {
                     id: row.objid,
                     path: `temp/${splitKey[1]}/output_autotag/images/${splitKey.pop()}_${row.img_path}`,
@@ -474,6 +485,8 @@ async function startProcess() {
                     Bucket: bucketName,
                     Key: imageObject.path,
                 };
+                logger.info(`Filename: ${filebasename} | Image Object Path: ${imageObject.path}`);
+                logger.info(`Filename: ${filebasename} | Image Object Bucketname: ${bucketName}`);
                 const command = new GetObjectCommand(getObjectParams);
                 const { Body } = await s3Client.send(command);
         
@@ -486,6 +499,7 @@ async function startProcess() {
                 });
                 const fileBuffer = Buffer.concat(chunks);
                 const localFilePath = path.join(__dirname, `${imageObject.path.split('/').pop()}`);
+                logger.info(`Filename: ${filebasename} | Local File Path: ${localFilePath}`);
                 fs_1.writeFileSync(localFilePath, fileBuffer);
                 const image_Buffer = await fs.readFile(localFilePath);
                 const response = await generateAltText(imageObject, image_Buffer);

@@ -385,66 +385,95 @@ def natural_sort_key(filename):
 
 # --- NEW: Bounding Box Conversion and Comparison Functions ---
 
-def convert_excel_bbox(excel_bbox):
-    """
-    Convert an Excel bounding box from (x, y, w, h) where y is the top coordinate 
-    into a PDF-like bounding box.
+# def convert_excel_bbox(excel_bbox):
+#     """
+#     Convert an Excel bounding box from (x, y, w, h) where y is the top coordinate 
+#     into a PDF-like bounding box.
     
-    Parameters:
-        excel_bbox (tuple): (x, y, w, h)
-            x: left coordinate,
-            y: top coordinate,
-            w: width,
-            h: height.
+#     Parameters:
+#         excel_bbox (tuple): (x, y, w, h)
+#             x: left coordinate,
+#             y: top coordinate,
+#             w: width,
+#             h: height.
             
-    Returns:
-        tuple: (left, bottom, width, height) where bottom = y - h.
-    """
-    x, y, w, h = excel_bbox
-    bottom = y - h
-    return x, bottom, w, h
+#     Returns:
+#         tuple: (left, bottom, width, height) where bottom = y - h.
+#     """
+#     x, y, w, h = excel_bbox
+#     bottom = y - h
+#     return x, bottom, w, h
 
-def bbox_diff(api_bbox, excel_bbox):
-    """
-    Compute the absolute differences between the API bbox and the Excel bbox.
+# def bbox_diff(api_bbox, excel_bbox):
+#     """
+#     Compute the absolute differences between the API bbox and the Excel bbox.
     
-    API bbox is in the format [left, bottom, right, top] (PDF coordinates).
-    Excel bbox is provided as (x, y, w, h) where y is the top coordinate.
-    We first convert the Excel bbox.
+#     API bbox is in the format [left, bottom, right, top] (PDF coordinates).
+#     Excel bbox is provided as (x, y, w, h) where y is the top coordinate.
+#     We first convert the Excel bbox.
     
-    Returns:
-        tuple: (diff_width, diff_height, diff_left, diff_bottom)
-    """
-    # Round API values using PDF coordinate system (left, bottom, right, top)
-    api_left   = round(api_bbox[0])
-    api_bottom = round(api_bbox[1])
-    api_right  = round(api_bbox[2])
-    api_top    = round(api_bbox[3])
+#     Returns:
+#         tuple: (diff_width, diff_height, diff_left, diff_bottom)
+#     """
+#     # Round API values using PDF coordinate system (left, bottom, right, top)
+#     api_left   = round(api_bbox[0])
+#     api_bottom = round(api_bbox[1])
+#     api_right  = round(api_bbox[2])
+#     api_top    = round(api_bbox[3])
     
-    api_width  = api_right - api_left
-    api_height = api_top - api_bottom
+#     api_width  = api_right - api_left
+#     api_height = api_top - api_bottom
     
-    # Convert the Excel bbox (x, y, w, h) where y is the top coordinate
-    excel_left, excel_bottom, excel_w, excel_h = convert_excel_bbox(excel_bbox)
-    
-    diff_width  = abs(api_width - excel_w)
-    diff_height = abs(api_height - excel_h)
-    diff_left   = abs(api_left - excel_left)
-    diff_bottom = abs(api_bottom - excel_bottom)
-    
-    return diff_width, diff_height, diff_left, diff_bottom
+ 
+#     # Convert the Excel bbox (x, y, w, h) where y is the top coordinate
+#     excel_left, excel_bottom, excel_w, excel_h = convert_excel_bbox(excel_bbox)
 
-def is_bbox_match(api_bbox, excel_bbox, tol=7):
+    
+#     diff_width  = abs(api_width - excel_w)
+#     diff_height = abs(api_height - excel_h)
+#     diff_left   = abs(api_left - excel_left)
+#     diff_bottom = abs(api_bottom - excel_bottom)
+    
+#     return diff_width, diff_height, diff_left, diff_bottom
+
+def is_bbox_match(api_bbox, excel_bbox,tol=7):
     """
     Returns True if the differences between the API bbox and the converted Excel bbox 
     are all within the specified tolerance.
     """
-    diff_width, diff_height, diff_left, diff_bottom = bbox_diff(api_bbox, excel_bbox)
+    api_0 = round(api_bbox[0])
+    api_1 = round(api_bbox[1])
+    api_2 = round(api_bbox[2])
+    api_3 = round(api_bbox[3])
+    
+    api_width  = api_2 - api_0
+    api_height = api_3 - api_1
+    
+    diff_width = abs(api_width - excel_bbox[2])
+    diff_height = abs(api_height - excel_bbox[3])
+    
+    diff_x = abs(api_0-excel_bbox[0])
+    diff_y = abs(api_3-excel_bbox[1])
     return (diff_width <= tol and diff_height <= tol and
-            diff_left <= tol and diff_bottom <= tol)
+            diff_x <= tol and diff_y <= tol)
 
-def create_sqlite_db(by_page, filename, images_output_dir, object_ids, image_paths, page_num_img, parsed_cordinates, bucket_name, s3_folder_autotag, file_key):
+import os
+import sqlite3
+import logging
+
+# It is assumed that these functions are defined elsewhere in your project:
+# from your_module import is_bbox_match, bbox_diff
+# Also, your s3 client is assumed to be imported/configured:
+# import boto3
+# s3 = boto3.client('s3')
+
+def create_sqlite_db(by_page, filename, images_output_dir, object_ids, image_paths,
+                     page_num_img, parsed_cordinates, bucket_name, s3_folder_autotag, file_key):
+    # Build the SQLite database file path and create a new database.
     db_path = os.path.join(images_output_dir, "temp_images_data.db")
+    if os.path.exists(db_path):
+        os.remove(db_path)
+        logging.info(f'Filename : {filename} | Removed existing SQLite DB')
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("""
@@ -457,102 +486,114 @@ def create_sqlite_db(by_page, filename, images_output_dir, object_ids, image_pat
             context TEXT
         )
     """)
-
-    # To enforce one-to-one mapping, track assigned API elements.
+    
+    # This set ensures that a candidate from the API is only assigned once.
     assigned_candidates = set()
-
+    
+    # Process each Excel row (each image from Excel)
     for objid, img_path, pg_num, excel_bbox in zip(object_ids, image_paths, page_num_img, parsed_cordinates):
-        context = ""
-        candidate = None
-        
         if pg_num not in by_page:
             logging.warning(f"Page {pg_num} not found in API data for file {filename}.")
             context = "No API data for this page."
         else:
-            # Filter API elements on this page for candidates:
+            # --------------------------------------------------------------------
+            # 1. Identify the current candidate using bounding box matching.
+            # --------------------------------------------------------------------
             candidates = []
-            for ele in by_page[pg_num]:
-                # Enforce one-to-one mapping.
-                if id(ele) in assigned_candidates:
-                    logging.debug(f"Candidate {ele.get('ObjectID')} already assigned. Skipping.")
-                    continue
-                if "filePaths" not in ele:
-                    logging.debug(f"Candidate {ele.get('ObjectID')} has no filePaths. Skipping.")
-                    continue
-                
-                # Get only image file paths (ignore XLSX or non-image extensions)
-                paths = ele["filePaths"]
-                image_paths_list = [p for p in paths if p.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
-                if not image_paths_list:
-                    logging.debug(f"Candidate {ele.get('ObjectID')} has no image file paths (filtered out XLSX). Skipping.")
-                    continue
+            for page, val in by_page.items():
+                for ele in val:
+                    # Enforce one-to-one mapping: skip already assigned elements.
+                    if id(ele) in assigned_candidates:
+                        logging.debug(f"Candidate {ele.get('ObjectID')} already assigned. Skipping.")
+                        continue
+                    if "filePaths" not in ele:
+                        logging.debug(f"Candidate {ele.get('ObjectID')} has no filePaths. Skipping.")
+                        continue
 
-                # Use the first image path for further matching.
-                candidate_image_path = image_paths_list[0]
-                
-                # Exclude if from tables directory (if desired).
-                if "tables" in candidate_image_path.lower():
-                    logging.debug(f"Candidate {ele.get('ObjectID')} is from a tables directory. Skipping.")
-                    continue
+                    # Consider only file paths with image extensions.
+                    paths = ele["filePaths"]
+                    image_paths_list = [p for p in paths if p.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
+                    if not image_paths_list:
+                        logging.debug(f"Candidate {ele.get('ObjectID')} has no valid image file paths. Skipping.")
+                        continue
 
-                # Make sure there is a bounding box we can compare.
-                if "attributes" not in ele or "BBox" not in ele["attributes"]:
-                    logging.debug(f"Candidate {ele.get('ObjectID')} has no bounding box data. Skipping.")
-                    continue
+                    candidate_image_path = image_paths_list[0]
+                    if "tables" in candidate_image_path.lower():
+                        logging.debug(f"Candidate {ele.get('ObjectID')} is from a tables directory. Skipping.")
+                        continue
 
-                # Check the bounding box difference.
-                # if is_bbox_match(ele["attributes"]["BBox"], excel_bbox, tol=7):
-                if is_bbox_match(ele["Bounds"], excel_bbox, tol=7):  
-                    # Log the detailed differences for this candidate.
-                    diff_width, diff_height, diff_left, diff_bottom = bbox_diff(ele["attributes"]["BBox"], excel_bbox)
-                    total_score = diff_width + diff_height + diff_left + diff_bottom
-                    logging.debug(f"Candidate {ele.get('ObjectID')} passed: diff_width={diff_width}, diff_height={diff_height}, diff_left={diff_left}, diff_bottom={diff_bottom}, total_score={total_score}")
-                    # Store the candidate image path for later use.
-                    ele["candidate_image_path"] = candidate_image_path
-                    # Append candidate along with its computed score.
-                    ele["score"] = total_score
-                    candidates.append(ele)
-                else:
-                    diff_width, diff_height, diff_left, diff_bottom = bbox_diff(ele["attributes"]["BBox"], excel_bbox)
-                    logging.debug(f"Candidate {ele.get('ObjectID')} rejected due to bbox differences: diff_width={diff_width}, diff_height={diff_height}, diff_left={diff_left}, diff_bottom={diff_bottom}")
+                    # Make sure the candidate has bounding box data.
+                    if "attributes" not in ele or "BBox" not in ele["attributes"]:
+                        logging.debug(f"Candidate {ele.get('ObjectID')} has no bounding box data. Skipping.")
+                        continue
 
-            # Decide which candidate to choose based on the number of matches.
+                    # Check if the candidate's bounding box matches the Excel bounding box.
+                    if is_bbox_match(ele["Bounds"], excel_bbox, tol=7):
+                        candidates.append(ele)
+
             if len(candidates) == 1:
-                candidate = candidates[0]
+                current_candidate = candidates[0]
             elif len(candidates) > 1:
-                candidate = min(candidates, key=lambda cand: cand["score"])
+                current_candidate = candidates[0]
             else:
-                candidate = None
+                current_candidate = None
 
-        # Build the context string based on candidate.
-        if candidate:
-            assigned_candidates.add(id(candidate))
-            candidate_text = candidate.get("Text", "")
-            candidate_filename = os.path.basename(candidate.get("candidate_image_path", candidate["filePaths"][0]))
-            context = (candidate_text + " " if candidate_text else "") + "<IMAGE INTERESTED> " + candidate_filename + " </IMAGE INTERESTED>"
-            logging.info(f"Candidate {candidate.get('ObjectID')} selected with score {candidate.get('score')}.")
-        else:
-            context = "No matching candidate found"
-            logging.info("No candidate attested for current Excel row.")
-
-        print(f"{True if '<IMAGE INTERESTED>' in context else False}")
+            if current_candidate:
+                assigned_candidates.add(id(current_candidate))
+            
+            # --------------------------------------------------------------------
+            # 2. Build the whole page context string.
+            # --------------------------------------------------------------------
+            # The context string is built by iterating over all API elements for the page,
+            # preserving their original order.
+            context_parts = []
+            for ele in by_page[pg_num]:
+                # Append any text from the element.
+                if "Text" in ele and ele["Text"]:
+                    context_parts.append(ele["Text"])
+                # If the element has image file paths (and valid image extensions), append an image marker.
+                if "filePaths" in ele:
+                    valid_paths = [p for p in ele["filePaths"]
+                                   if p.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))
+                                   and "tables" not in p.lower()]
+                    if valid_paths:
+                        image_name = os.path.basename(valid_paths[0])
+                        if current_candidate is not None and id(ele) == id(current_candidate):
+                            # This is the current image (the one matching the Excel row).
+                            marker = f"<IMAGE INTERESTED>{image_name}</IMAGE INTERESTED>"
+                        else:
+                            # Other images on the page.
+                            marker = f"<OTHER IMAGE>{image_name}</OTHER IMAGE>"
+                        context_parts.append(marker)
+            
+            # Join all parts with a space.
+            context = " ".join(context_parts)
+        
+        # Debug prints.
+        print(f"{'<IMAGE INTERESTED>' in context}")
         print("context:", context)
         print(" ======================")
+        img_modified_path = f"{os.path.basename(img_path)}"
+        # Insert the data into the SQLite database.
         cursor.execute("""
             INSERT INTO image_data (objid, img_path, context)
             VALUES (?, ?, ?)
         """, (
             objid,
-            os.path.basename(img_path),
+            img_modified_path,
             context
         ))
-
+    
     conn.commit()
     conn.close()
     logging.info(f'Filename : {filename} | SQLite DB created with image data')
-    # Upload the SQLite DB to S3
-    s3.upload_file(os.path.join(images_output_dir, "temp_images_data.db"), bucket_name, f'{s3_folder_autotag}/{file_key}_temp_images_data.db')
+    
+    # Upload the SQLite DB to S3.
+    s3.upload_file(os.path.join(images_output_dir, "temp_images_data.db"),
+                     bucket_name,
+                     f'{s3_folder_autotag}/{file_key}_temp_images_data.db')
     logging.info(f'Filename : {filename} | Uploaded SQLite DB to S3')
+
 
 def extract_images_from_excel(filename, figure_path, autotag_report_path, images_output_dir, bucket_name, s3_folder_autotag, file_key):
     """
@@ -591,6 +632,7 @@ def extract_images_from_excel(filename, figure_path, autotag_report_path, images
     image_paths = []
     coordinates = df["Unnamed: 3"].dropna().values[1:]
     parsed_cordinates = [ast.literal_eval(item) for item in coordinates]
+
     logging.info(f'Filename : {filename} | Sheet: {sheet} , Sheet Images: {sheet._images}')
 
     # Loop through all images in the sheet and save them locally.
@@ -601,12 +643,42 @@ def extract_images_from_excel(filename, figure_path, autotag_report_path, images
         with open(img_path, 'wb') as f:
             f.write(img._data())
         logging.info(f'Filename : {filename} | Image {idx + 1} saved as {img_path}')
+    # image_paths = [
+    #     os.path.join(figure_path, f)
+    #     for f in sorted(os.listdir(images_output_dir), key=natural_sort_key)
+    # ]
+    
     image_paths = [
-        os.path.join(images_output_dir, f)
-        for f in sorted(os.listdir(images_output_dir), key=natural_sort_key)
+        os.path.join(figure_path, f)
+        for f in sorted(os.listdir(figure_path), key=natural_sort_key)
     ]
     
-    logging.info(f'Filename : {filename} | Image Paths: {image_paths}')
+    # To upload high resolution images generated by extarct API, converting autotag images to the extract API images
+    # image_paths_extract_API = []
+    # images_output_dir = f"output/zipfile/{filename}/"
+    
+    # logger.info(f"Filename : {filename} | Loops: {len(page_num_img)} and {len(parsed_cordinates)}")
+    # for page_num, excel_cord in zip(page_num_img,parsed_cordinates):
+
+    #     for page, val in by_page.items():
+    #         for ele in val:
+    #             if "filePaths" not in ele:
+    #                 logging.debug(f"Candidate {ele.get('ObjectID')} has no filePaths. Skipping.")
+    #                 continue
+    #             paths = ele["filePaths"]
+    #             image_paths_list = [p for p in paths if p.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
+    #             if not image_paths_list:
+    #                 logging.debug(f"Candidate {ele.get('ObjectID')} has no image file paths (filtered out XLSX). Skipping.")
+    #                 continue
+    #             logging.info(f'Filename : {filename} | Image Paths List: {image_paths_list}')
+    #             candidate_image_cord = ele["attributes"]["BBox"]
+               
+    #             if is_bbox_match(candidate_image_cord, excel_cord, tol=7):
+    #                 image_paths_extract_API.append(images_output_dir+image_paths_list[0])
+    #                 break
+
+    
+    # logging.info(f'Filename : {filename} | Image Paths: {image_paths}')
     # Upload the images to S3
     for img_path in image_paths:
         s3.upload_file(img_path, bucket_name, f'{s3_folder_autotag}/images/{file_key}_{os.path.basename(img_path)}')
@@ -665,7 +737,7 @@ def main():
 
         logging.info(f"PDF saved with updated metadata and TOC. File location: COMPLIANT_{file_key}")
 
-        figure_path = f"output/ExtractTextInfoFromPDF/{filename}/figures"
+        figure_path = f"{extract_to}/figures"
         autotag_report_path = f"output/AutotagPDF/{filename}.xlsx"
         images_output_dir = "output/zipfile/images"
 
