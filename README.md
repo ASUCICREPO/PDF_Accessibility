@@ -197,3 +197,7 @@ For further assistance, please open an issue in this repository.
 ## Contributing
 
 Contributions to this project are welcome. Please fork the repository and submit a pull request with your changes
+
+## Release Notes
+
+See the latest [Release Notes](RELEASE_NOTES.md) for version updates and improvements.
