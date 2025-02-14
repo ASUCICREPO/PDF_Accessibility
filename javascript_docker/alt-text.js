@@ -508,7 +508,7 @@ async function startProcess() {
             } catch (error) {
                 logger.info(`Filename: ${filebasename} | Error: ${error}`);
             }
-            await sleep(10000);
+            await sleep(5000);
         }
 
         let defaultText = "No text available"; 
