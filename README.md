@@ -138,6 +138,7 @@ Ensure your project has the following structure:
      ```
      aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
      ```
+  
 9. **Set a environment variable once for deployment**
    - An environment variable needs to be set before deployment. This step ensures compatibility and prevents deployment issues.
    - Please checkout Troubleshooting if you would like to know more about this.
@@ -149,6 +150,7 @@ Ensure your project has the following structure:
      ```
      set BUILDX_NO_DEFAULT_ATTESTATIONS=1
      ```
+  
 10. **Deploy the CDK Stack**:
    - Deploy the stack to AWS:
      ```
