@@ -141,7 +141,7 @@ Ensure your project has the following structure:
   
 9. **Set a environment variable once for deployment**
    - An environment variable needs to be set before deployment. This step ensures compatibility and prevents deployment issues.
-   - Please checkout Troubleshooting if you would like to know more about this.
+   - For additional guidance or if you encounter any deployment issues, please refer to [Troubleshooting](#troubleshooting) section.
    - For Mac,
      ```
      export BUILDX_NO_DEFAULT_ATTESTATIONS=1   
@@ -192,7 +192,14 @@ Subprocess exited with error 9009 `, try changing ` "app": "python3 app.py" ` to
 - If the CDK deploy responds with: ` Resource handler returned message: "The maximum number of addresses has been reached. ` request additional IPs from AWS. Go to https://us-east-1.console.aws.amazon.com/servicequotas/home/services/ec2/quotas and search for "IP". Then, choose "EC2-VPC Elastic IPs". Note the AWS region is included in the URL, change it to the region you are deploying into. Requests for additional IPs are usually completed within minutes.
 - If any Docker images are not pushing to ECR, manually deploy to ECR using the push commands provided in the ECR console. Then, manually update the ECS service by creating a new revision of the task definition and updating the image URI with the one just deployed.
 For further assistance, please open an issue in this repository.
-- If you encounter issues with the 9th step, refer to the related discussion on the AWS CDK GitHub repository for further troubleshooting: [CDK Github Issue](https://github.com/aws/aws-cdk/issues/30258)
+- If you encounter issues with the 9th step, refer to the related discussion on the AWS CDK GitHub repository for further troubleshooting: [CDK Github Issue](https://github.com/aws/aws-cdk/issues/30258). You can also consult our [Troubleshooting CDK Deploy documentation](TROUBLESHOOTING_CDK_DEPLOY.md) for more detailed guidance.
+- If you continue to experience issues, please reach out to **ai-cic@amazon.com** for further assistance.
+
+## Additional Resources
+
+For more details on the problem approach, industry impact, and our innovative solution developed by ASU CIC, please visit our blog: [PDF Accessibility Blog](https://smartchallenges.asu.edu/challenges/pdf-accessibility-ohio-state-university)
+
+
 
 ## Contributing
 
