@@ -14,5 +14,5 @@ cdk.out/
 .cdk.staging/
 __pycache__/
 *.pyc
-docker_javascript/node_modules/
+javascript_docker/node_modules
 lambda/add_title/venv

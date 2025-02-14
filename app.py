@@ -88,12 +88,12 @@ class PDFAccessibility(Stack):
         bucket.grant_read_write(ecs_task_execution_role)
         # Create ECS Task Log Groups explicitly
         python_container_log_group = logs.LogGroup(self, "PythonContainerLogGroup",
-                                                log_group_name="/ecs/MyFirstTaskDef/python_container",
+                                                log_group_name="/ecs/MyFirstTaskDef/PythonContainerLogGroup",
                                                 retention=logs.RetentionDays.ONE_WEEK,
                                                 removal_policy=cdk.RemovalPolicy.DESTROY)
 
         javascript_container_log_group = logs.LogGroup(self, "JavaScriptContainerLogGroup",
-                                                    log_group_name="/ecs/MySecondTaskDef/javascript_container",
+                                                    log_group_name="/ecs/MySecondTaskDef/JavaScriptContainerLogGroup",
                                                     retention=logs.RetentionDays.ONE_WEEK,
                                                     removal_policy=cdk.RemovalPolicy.DESTROY)
         # ECS Task Definitions
@@ -331,7 +331,7 @@ class PDFAccessibility(Stack):
 
         state_machine = sfn.StateMachine(self, "MyStateMachine",
                                          definition=parallel_state,
-                                         timeout=Duration.minutes(10),
+                                         timeout=Duration.minutes(150),
                                          logs=sfn.LogOptions(
                                              destination=log_group_stepfunctions,
                                              level=sfn.LogLevel.ALL

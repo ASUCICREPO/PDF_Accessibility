@@ -138,12 +138,19 @@ Ensure your project has the following structure:
      ```
      aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
      ```
-9. **Only For Windows - Set a environment variable once for deployment**
-   - For Windows users, an environment variable needs to be set before deployment. This step ensures compatibility and prevents deployment issues.
-   - Please Checkout Troubleshooting if you would like to know more about this.
+  
+9. **Set a environment variable once for deployment**
+   - An environment variable needs to be set before deployment. This step ensures compatibility and prevents deployment issues.
+   - Please checkout Troubleshooting if you would like to know more about this.
+   - For Mac,
+     ```
+     export BUILDX_NO_DEFAULT_ATTESTATIONS=1   
+     ```
+   - For Windows,
      ```
      set BUILDX_NO_DEFAULT_ATTESTATIONS=1
      ```
+  
 10. **Deploy the CDK Stack**:
    - Deploy the stack to AWS:
      ```
@@ -161,6 +168,17 @@ Once the infrastructure is deployed:
 ## Monitoring
 
 - Use the CloudWatch dashboards created by the stack to monitor the progress and performance of the PDF processing pipeline.
+
+## Limitations
+
+- This solution does not remediate corrupted PDFs.
+
+- It can process scanned PDFs, but the output accuracy is approximately 80%.
+
+- It does not remediate fillable forms.
+
+- It does not handle color selection/contrast adjustments.
+
 
 ## Troubleshooting
 
