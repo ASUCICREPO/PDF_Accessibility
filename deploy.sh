@@ -68,4 +68,4 @@ for service in ecs-python-task ecs-javascript-task; do
 done
 
 # Deploy CDK stack using the uploaded images from ECR.
-cdk destroy --force && cdk deploy --require-approval never
+cdk deploy --require-approval never
