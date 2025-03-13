@@ -6,7 +6,7 @@ This project builds an AWS infrastructure using AWS CDK (Cloud Development Kit) 
 
 Before running the AWS CDK stack, ensure the following are installed and configured:
 
-1. **AWS Bedrock Access**: Ensure your AWS account has access to the Claude Sonnet 3.5 V2 model in Amazon Bedrock.
+1. **AWS Bedrock Access**: Ensure your AWS account has access to the Nova pro model in Amazon Bedrock.
    - [Request access to Amazon Bedrock](https://console.aws.amazon.com/bedrock/) through the AWS console if not already enabled.
 
 2. **Adobe API Access** - An enterprise-level contract or a trial account (For Testing) for Adobe's API is required.
