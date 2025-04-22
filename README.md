@@ -3,9 +3,9 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 
-# Document Accessibility
+# Content Accessibility with AWS
 
-A comprehensive solution for converting PDF documents to accessible HTML and remediating accessibility issues in web content.
+A comprehensive solution for converting PDF documents to HTML and remediating accessibility issues in web content.
 
 ## Table of Contents
 - [Features](#features)
@@ -39,7 +39,7 @@ A comprehensive solution for converting PDF documents to accessible HTML and rem
 
 ## Prerequisites
 
-Before using the Document Accessibility tool, ensure the following prerequisites are met:
+Before using the Content Accessibility with AWS tool, ensure the following prerequisites are met:
 
 1. **AWS Account**: You need an AWS account with appropriate permissions.
 2. **S3 Bucket**: Create an S3 bucket for storing input files, intermediate results, and outputs.
@@ -64,7 +64,7 @@ Before using the Document Accessibility tool, ensure the following prerequisites
 
 ```bash
 # From PyPI
-pip install document-accessibility
+pip install content-accessibility-with-aws
 
 # From source
 pip install .
@@ -84,7 +84,7 @@ export BDA_PROJECT_ARN=arn:aws:bedrock:us-west-2:123456789012:project/my-accessi
 
 Optional environment variables:
 - `AWS_PROFILE`: Specify an AWS CLI profile to use.
-- `DOCUMENT_ACCESSIBILITY_WORK_DIR`: Directory for temporary files (default: system temp).
+- `CONTENT_ACCESSIBILITY_WORK_DIR`: Directory for temporary files (default: system temp).
 
 ### Example Configuration File
 
@@ -252,7 +252,7 @@ The package provides a command-line interface with several subcommands:
 ### PDF to HTML Conversion
 
 ```bash
-document-accessibility convert --input path/to/document.pdf --output output/directory
+content-accessibility-with-aws convert --input path/to/document.pdf --output output/directory
 ```
 
 Options:
@@ -270,13 +270,13 @@ Options:
 ### Accessibility Audit
 
 ```bash
-document-accessibility audit --input path/to/document.html --output accessibility-report.json --format json
+content-accessibility-with-aws audit --input path/to/document.html --output accessibility-report.json --format json
 ```
 
 For HTML report:
 
 ```bash
-document-accessibility audit --input path/to/document.html --output accessibility-report.html --format html
+content-accessibility-with-aws audit --input path/to/document.html --output accessibility-report.html --format html
 ```
 
 Options:
@@ -290,7 +290,7 @@ Options:
 ### Remediation
 
 ```bash
-document-accessibility remediate --input path/to/document.html --output remediated.html
+content-accessibility-with-aws remediate --input path/to/document.html --output remediated.html
 ```
 
 Options:
@@ -308,7 +308,7 @@ Options:
 ### Complete Processing
 
 ```bash
-document-accessibility process --input path/to/document.pdf --output output/directory
+content-accessibility-with-aws process --input path/to/document.pdf --output output/directory
 ```
 
 This command runs the full workflow:
@@ -328,13 +328,13 @@ Options:
 ### Use a configuration file
 
 ```bash
-document-accessibility convert --config my-config.yaml --input document.pdf
+content-accessibility-with-aws convert --config my-config.yaml --input document.pdf
 ```
 
 ### Override config file settings with command-line arguments
 
 ```bash
-document-accessibility audit --config my-config.yaml --severity major --input document.html
+content-accessibility-with-aws audit --config my-config.yaml --severity major --input document.html
 ```
 
 ## Common Options
@@ -386,7 +386,7 @@ The package provides a Python API for programmatic use:
 ### Complete Processing Pipeline
 
 ```python
-from document_accessibility.api import process_pdf_accessibility
+from content_accessibility_with_aws.api import process_pdf_accessibility
 
 # Process a PDF through the full pipeline
 result = process_pdf_accessibility(
@@ -412,7 +412,7 @@ result = process_pdf_accessibility(
 ### Individual Components
 
 ```python
-from document_accessibility.api import (
+from content_accessibility_with_aws.api import (
     convert_pdf_to_html,
     audit_html_accessibility,
     remediate_html_accessibility
@@ -451,7 +451,7 @@ remediation_result = remediate_html_accessibility(
 ### Batch Processing
 
 ```python
-from document_accessibility.batch import (
+from content_accessibility_with_aws.batch import (
     submit_batch_job,
     check_job_status,
     get_job_results
@@ -490,7 +490,7 @@ For AWS credentials configuration:
 
 ## License
 
-MIT-0 License. See [LICENSE](LICENSE) for details.
+Apache-2.0 License. See [LICENSE](LICENSE) for details.
 
 ## Contributing
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute to this project.

@@ -196,7 +196,7 @@ The tool supports configuration through the following environment variables:
 | `BDA_S3_BUCKET` or `DOCUMENT_ACCESSIBILITY_S3_BUCKET` | S3 bucket name for storing input/output files | Yes |
 | `BDA_PROJECT_ARN` or `DOCUMENT_ACCESSIBILITY_BDA_PROJECT_ARN` | ARN for the BDA project | Yes |
 | `AWS_PROFILE` | AWS profile to use for credentials | No |
-| `DOCUMENT_ACCESSIBILITY_WORK_DIR` | Directory for temporary files | No |
+| `CONTENT_ACCESSIBILITY_WORK_DIR` | Directory for temporary files | No |
 
 Ensure these variables are set before running the tool.
 

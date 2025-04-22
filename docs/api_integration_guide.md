@@ -350,7 +350,7 @@ os.environ["BDA_PROJECT_ARN"] = "arn:aws:bedrock:us-west-2:123456789012:project/
 os.environ["AWS_PROFILE"] = "accessibility"
 
 # Working directory for the Streamlit app
-os.environ["DOCUMENT_ACCESSIBILITY_WORK_DIR"] = "/tmp/accessibility-work"
+os.environ["CONTENT_ACCESSIBILITY_WORK_DIR"] = "/tmp/accessibility-work"
 ```
 
 ### Configuration File

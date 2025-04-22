@@ -79,7 +79,7 @@ The Document Accessibility Streamlit interface provides a user-friendly web appl
 Run the Streamlit interface:
 
 ```bash
-streamlit run /path/to/document-accessibility/streamlit_app.py
+streamlit run /path/to/content-accessibility-with-aws/streamlit_app.py
 ```
 
 This will launch a local web server and open the application in your default browser.
@@ -95,7 +95,7 @@ The Streamlit app uses the following environment variables:
 | `BDA_S3_BUCKET` or `DOCUMENT_ACCESSIBILITY_S3_BUCKET` | S3 bucket name | Yes |
 | `BDA_PROJECT_ARN` or `DOCUMENT_ACCESSIBILITY_BDA_PROJECT_ARN` | BDA project ARN | No (Optional) |
 | `AWS_PROFILE` | AWS profile name | No (Optional) |
-| `DOCUMENT_ACCESSIBILITY_WORK_DIR` | Directory for temporary files | No (Default: system temp) |
+| `CONTENT_ACCESSIBILITY_WORK_DIR` | Directory for temporary files | No (Default: system temp) |
 
 Example setup:
 
@@ -103,7 +103,7 @@ Example setup:
 # Set required environment variables
 export BDA_S3_BUCKET=my-accessibility-bucket
 export BDA_PROJECT_ARN=arn:aws:bedrock:us-west-2:123456789012:project/my-bda-project
-export DOCUMENT_ACCESSIBILITY_WORK_DIR=/path/to/work/directory
+export CONTENT_ACCESSIBILITY_WORK_DIR=/path/to/work/directory
 ```
 
 ### Debug Mode
@@ -261,7 +261,7 @@ If PDF processing fails:
 #### Memory Issues with Large Documents
 
 For large documents:
-1. Set `DOCUMENT_ACCESSIBILITY_WORK_DIR` to a location with ample disk space
+1. Set `CONTENT_ACCESSIBILITY_WORK_DIR` to a location with ample disk space
 2. Process the document in smaller chunks if possible
 3. Increase available memory for the Streamlit process
 

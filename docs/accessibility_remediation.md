@@ -25,12 +25,12 @@ You can remediate accessibility issues in two ways:
 
 1. **As part of PDF conversion**:
    ```bash
-   document-accessibility process --input path/to/input.pdf --output output/ --perform-remediation
+   content-accessibility-with-aws process --input path/to/input.pdf --output output/ --perform-remediation
    ```
 
 2. **For an existing HTML file with an audit report**:
    ```bash
-   document-accessibility remediate --input path/to/existing.html --output remediated.html
+   content-accessibility-with-aws remediate --input path/to/existing.html --output remediated.html
    ```
 
 #### Available CLI Options
@@ -50,7 +50,7 @@ Accessibility remediation options:
 ### From Python Code
 
 ```python
-from document_accessibility.api import remediate_html_accessibility
+from content_accessibility_with_aws.api import remediate_html_accessibility
 
 # After performing an accessibility audit that generates an audit report:
 remediation_result = remediate_html_accessibility(
@@ -112,7 +112,7 @@ See the `tests/test_accessibility_remediation.py` script for a complete example.
 You can specify different Bedrock model IDs for remediation:
 
 ```bash
-document-accessibility remediate --input document.html --output remediated.html --model-id amazon.nova-lite-v1:0
+content-accessibility-with-aws remediate --input document.html --output remediated.html --model-id amazon.nova-lite-v1:0
 ```
 
 ### Filtered Remediation
@@ -120,7 +120,7 @@ document-accessibility remediate --input document.html --output remediated.html 
 Process only specific issue types:
 
 ```bash
-document-accessibility remediate --input document.html --output remediated.html --issue-types missing-alt-text,empty-alt-text
+content-accessibility-with-aws remediate --input document.html --output remediated.html --issue-types missing-alt-text,empty-alt-text
 ```
 
 ### Severity-Based Remediation
@@ -128,7 +128,7 @@ document-accessibility remediate --input document.html --output remediated.html 
 Focus on the most important issues:
 
 ```bash
-document-accessibility remediate --input document.html --output remediated.html --severity-threshold critical
+content-accessibility-with-aws remediate --input document.html --output remediated.html --severity-threshold critical
 ```
 
 ## Limitations

@@ -18,7 +18,7 @@ class Config:
     BDA_PROJECT_ARN_KEY = "BDA_PROJECT_ARN"
     BDA_PROJECT_ARN_ALT_KEY = "DOCUMENT_ACCESSIBILITY_BDA_PROJECT_ARN"
     AWS_PROFILE_KEY = "AWS_PROFILE"
-    WORK_DIR_KEY = "DOCUMENT_ACCESSIBILITY_WORK_DIR"
+    WORK_DIR_KEY = "CONTENT_ACCESSIBILITY_WORK_DIR"
     def __init__(self):
         """Initialize configuration with values from environment variables."""
         # Load configuration from environment variables
