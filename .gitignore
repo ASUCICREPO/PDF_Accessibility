@@ -11,3 +11,4 @@ streamlit_work_dir/*
 app/static/*  # Streamlit static files that get dynamically added there.
 *.egg-info/*
 *.egg/*
+dist/*
