@@ -1,0 +1,13 @@
+venv/*
+__pycache__/*
+*.pyc   
+*.pyo
+*.pyd
+Chapter-TextBook-IntroToPhilosophy_html/
+build/*
+output/*
+examples/output*/**/*
+streamlit_work_dir/*
+app/static/*  # Streamlit static files that get dynamically added there.
+*.egg-info/*
+*.egg/*

@@ -1,0 +1,485 @@
+<!--
+ Copyright 2025 Amazon.com, Inc. or its affiliates.
+ SPDX-License-Identifier: Apache-2.0
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accessibility Audit & Remediation Report</title>
+    <style>
+        :root {
+            --primary: #0078d4;
+            --secondary: #106ebe;
+            --success: #107c10;
+            --danger: #d13438;
+            --warning: #ffb900;
+            --info: #0078d4;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --gray: #6c757d;
+            --gray-light: #f8f9fa;
+            --gray-dark: #343a40;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        header {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+        }
+        
+        h1, h2, h3, h4, h5, h6 {
+            margin-top: 0;
+            font-weight: 600;
+            color: #222;
+        }
+        
+        h1 {
+            font-size: 28px;
+            color: var(--primary);
+        }
+        
+        h2 {
+            font-size: 22px;
+            margin-top: 25px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        h3 {
+            font-size: 18px;
+            margin-top: 20px;
+        }
+        
+        p {
+            margin: 0 0 12px;
+        }
+        
+        .summary {
+            background-color: #f0f7ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .tag {
+            display: inline-block;
+            padding: 3px 8px;
+            font-size: 12px;
+            font-weight: 500;
+            border-radius: 4px;
+            margin-right: 5px;
+            background-color: #e9ecef;
+        }
+        
+        .tag-critical {
+            color: #fff;
+            background-color: var(--danger);
+        }
+        
+        .tag-major {
+            color: #fff;
+            background-color: var(--warning);
+        }
+        
+        .tag-minor {
+            color: #fff;
+            background-color: var(--info);
+        }
+        
+        .tag-remediated {
+            color: #fff;
+            background-color: var(--success);
+        }
+        
+        .tag-failed {
+            color: #fff;
+            background-color: var(--danger);
+        }
+        
+        .issue {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            background-color: #fff;
+        }
+        
+        .issue-header {
+            padding: 10px 15px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .issue-body {
+            padding: 15px;
+            display: none;
+        }
+        
+        .issue-body.show {
+            display: block;
+        }
+        
+        .issue-message {
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        
+        .issue-details {
+            margin-bottom: 15px;
+        }
+        
+        .issue-meta {
+            margin-top: 10px;
+            font-size: 14px;
+            color: var(--gray);
+        }
+        
+        .remediation {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f0fff0;
+            border-left: 3px solid var(--success);
+        }
+        
+        .progress-container {
+            margin: 15px 0;
+            background-color: #e9ecef;
+            border-radius: 4px;
+        }
+        
+        .progress-bar {
+            height: 10px;
+            background-color: var(--primary);
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+        
+        .progress-bar.success {
+            background-color: var(--success);
+        }
+        
+        .progress-bar.warning {
+            background-color: var(--warning);
+        }
+        
+        .progress-bar.danger {
+            background-color: var(--danger);
+        }
+
+        .stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            flex: 1;
+            min-width: 150px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        .stat-number {
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            color: var(--gray);
+        }
+
+        .remediation-summary {
+            background-color: #f0fff0;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+            color: var(--gray);
+            font-size: 14px;
+            text-align: center;
+        }
+        
+        /* Toggle button styles */
+        .toggle-btn {
+            background: none;
+            border: none;
+            color: var(--primary);
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        
+        th, td {
+            padding: 8px 12px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        /* Severity indicators in tables */
+        .severity-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .severity-critical {
+            background-color: var(--danger);
+        }
+        
+        .severity-major {
+            background-color: var(--warning);
+        }
+        
+        .severity-minor {
+            background-color: var(--info);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Accessibility Audit & Remediation Report</h1>
+            {% if report.html_path %}
+            <p>Document: {{ report.html_path }}</p>
+            {% endif %}
+        </header>
+
+        <section class="summary">
+            <h2>Summary</h2>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-number">{{ report.total_issues if report.total_issues is defined else report.issues|length }}</div>
+                    <div class="stat-label">Total Issues</div>
+                </div>
+                
+                {% if report.severity_counts %}
+                <div class="stat-card">
+                    <div class="stat-number">{{ report.severity_counts.critical }}</div>
+                    <div class="stat-label">Critical</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-number">{{ report.severity_counts.major }}</div>
+                    <div class="stat-label">Major</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-number">{{ report.severity_counts.minor }}</div>
+                    <div class="stat-label">Minor</div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Remediation summary if available -->
+            {% if report.has_remediation %}
+            <div class="remediation-summary">
+                <h3>Remediation Results</h3>
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-number">{{ report.issues_processed }}</div>
+                        <div class="stat-label">Issues Processed</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-number">{{ report.issues_remediated }}</div>
+                        <div class="stat-label">Issues Remediated</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-number">{{ report.issues_failed }}</div>
+                        <div class="stat-label">Issues Failed</div>
+                    </div>
+
+                    {% if report.issues_remediated is defined and report.issues_processed is defined and report.issues_processed > 0 %}
+                    <div class="stat-card">
+                        <div class="stat-number">{{ (report.issues_remediated / report.issues_processed * 100) | int }}%</div>
+                        <div class="stat-label">Success Rate</div>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                {% if report.issues_remediated is defined and report.issues_processed is defined and report.issues_processed > 0 %}
+                <div class="progress-container">
+                    <div class="progress-bar {{ 'success' if (report.issues_remediated / report.issues_processed) > 0.8 else ('warning' if (report.issues_remediated / report.issues_processed) > 0.5 else 'danger') }}" 
+                         style="width: {{ (report.issues_remediated / report.issues_processed * 100) | int }}%">
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </section>
+        
+        {% if report.identified_issue_type_counts or report.issue_type_counts %}
+        <section>
+            <h2>Issue Types</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Issue Type</th>
+                        <th>Identified</th>
+                        {% if report.has_remediation %}
+                        <th>Remediated</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set type_counts = report.identified_issue_type_counts if report.identified_issue_type_counts is defined else report.issue_type_counts %}
+                    {% if type_counts %}
+                        {% for issue_type, count in type_counts.items() %}
+                        <tr>
+                            <td>{{ issue_type }}</td>
+                            <td>{{ count }}</td>
+                            {% if report.has_remediation and report.remediated_issue_type_counts %}
+                            <td>{{ report.remediated_issue_type_counts.get(issue_type, 0) }}</td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    {% endif %}
+                </tbody>
+            </table>
+        </section>
+        {% endif %}
+        
+        <section>
+            <h2>Issues</h2>
+            {% set issue_list = report.details if report.details is defined and report.details else report.issues %}
+            {% if issue_list %}
+                {% for issue in issue_list %}
+                <div class="issue">
+                    <div class="issue-header" onclick="toggleIssue(this)">
+                        <div>
+                            {% if issue.severity %}
+                            <span class="tag tag-{{ issue.severity }}">{{ issue.severity }}</span>
+                            {% endif %}
+                            {{ issue.type if issue.type else "Unknown Issue" }}
+                            {% if issue.remediation_status %}
+                            <span class="tag tag-{{ issue.remediation_status }}">{{ issue.remediation_status }}</span>
+                            {% endif %}
+                        </div>
+                        <button class="toggle-btn">Show details</button>
+                    </div>
+                    <div class="issue-body">
+                        <div class="issue-message">{{ issue.message if issue.message else issue.description if issue.description else "No description available" }}</div>
+                        
+                        {% if issue.selector %}
+                        <div class="issue-details">
+                            <strong>Selector:</strong> {{ issue.selector }}
+                        </div>
+                        {% endif %}
+                        
+                        {% if issue.context %}
+                        <div class="issue-details">
+                            <strong>Context:</strong>
+                            <div class="code-block" style="background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; padding: 10px; overflow-wrap: break-word; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">{{ issue.context }}</div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if issue.fix_description or issue.remediation_details %}
+                        <div class="remediation">
+                            <strong>Remediation:</strong>
+                            <div>{{ issue.fix_description if issue.fix_description else issue.remediation_details }}</div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if issue.failure_reason %}
+                        <div class="remediation" style="background-color: #fff0f0; border-left: 3px solid var(--danger);">
+                            <strong>Failure Reason:</strong>
+                            <div>{{ issue.failure_reason }}</div>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="issue-meta">
+                            {% if issue.id %}ID: {{ issue.id }}{% endif %}
+                            {% if issue.wcag_criterion or issue.wcag %}
+                            <br>WCAG: {{ issue.wcag_criterion if issue.wcag_criterion else issue.wcag }}
+                            {% endif %}
+                            {% if issue.criterion_name %}
+                            <br>Criterion: {{ issue.criterion_name }}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p>No issues found in the report.</p>
+            {% endif %}
+        </section>
+        
+        <footer class="footer">
+            <p>Generated by Document Accessibility Tool</p>
+            <p>{{ report.timestamp if report.timestamp else "" }}</p>
+        </footer>
+    </div>
+
+    <script>
+        function toggleIssue(header) {
+            const body = header.nextElementSibling;
+            const button = header.querySelector('.toggle-btn');
+            
+            if (body.classList.contains('show')) {
+                body.classList.remove('show');
+                button.textContent = 'Show details';
+            } else {
+                body.classList.add('show');
+                button.textContent = 'Hide details';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+# Copyright 2025 Amazon.com, Inc. or its affiliates.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["setuptools>=64.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "content-accessibility-with-aws"
+dynamic = ["version"]
+authors = [
+    { name = "Addie Rudy <awsrudy@amazon.com>;" }
+]
+description = "Convert PDF documents to accessible HTML, audit for accessibility issues, and remediate them"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: Apache-2.0 License",
+    "Operating System :: OS Independent",
+    "Topic :: Text Processing :: Markup :: HTML",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "Pillow>=11.1.0",
+    "boto3>=1.37.11",
+    "botocore>=1.37.11",
+    "beautifulsoup4>=4.11.0",
+    "bs4>=0.0.1",
+    "pydantic>=2.10.6",
+    "defusedcsv>=2.0.0",
+    "Flask>=3.1.0",
+    "PyYaml>=6.0.0"
+]
+
+[project.optional-dependencies]
+WebApp = [
+    "streamlit>=1.43.2",
+]
+
+[project.urls]
+"Bug Tracker" = "https://github.com/awslabs/content-accessibility-with-aws/issues"
+"Documentation" = "https://github.com/awslabs/content-accessibility-with-aws"
+"Source Code" = "https://github.com/awslabs/content-accessibility-with-aws"
+
+[project.scripts]
+content-accessibility = "content_accessibility_with_aws.cli:main"
+content-accessibility-with-aws = "content_accessibility_with_aws.cli:main"
+
+
+[tool.setuptools]
+packages = { find = { include = ["content_accessibility_with_aws*"] } }
+
+[tool.setuptools.package-data]
+content_accessibility_with_aws = ["**/*.html"]
+
+[tool.setuptools.dynamic]
+version = { attr = "content_accessibility_with_aws.__version__" }
+
+[tool.pip-licenses]
+format = "markdown"
+with-description = true
+with-url = true
+with-version = true
+output = "THIRD-PARTY-LICENSES"
+order = "license"
+
