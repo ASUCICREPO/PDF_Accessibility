@@ -64,7 +64,7 @@ Before using the Content Accessibility with AWS tool, ensure the following prere
 
 ```bash
 # From PyPI
-pip install content-accessibility-with-aws
+pip install content-accessibilty-utility-on-aws
 
 # From source
 pip install .
@@ -252,7 +252,7 @@ The package provides a command-line interface with several subcommands:
 ### PDF to HTML Conversion
 
 ```bash
-content-accessibility-with-aws convert --input path/to/document.pdf --output output/directory
+content-accessibilty-utility-on-aws convert --input path/to/document.pdf --output output/directory
 ```
 
 Options:
@@ -270,13 +270,13 @@ Options:
 ### Accessibility Audit
 
 ```bash
-content-accessibility-with-aws audit --input path/to/document.html --output accessibility-report.json --format json
+content-accessibilty-utility-on-aws audit --input path/to/document.html --output accessibility-report.json --format json
 ```
 
 For HTML report:
 
 ```bash
-content-accessibility-with-aws audit --input path/to/document.html --output accessibility-report.html --format html
+content-accessibilty-utility-on-aws audit --input path/to/document.html --output accessibility-report.html --format html
 ```
 
 Options:
@@ -290,7 +290,7 @@ Options:
 ### Remediation
 
 ```bash
-content-accessibility-with-aws remediate --input path/to/document.html --output remediated.html
+content-accessibilty-utility-on-aws remediate --input path/to/document.html --output remediated.html
 ```
 
 Options:
@@ -308,7 +308,7 @@ Options:
 ### Complete Processing
 
 ```bash
-content-accessibility-with-aws process --input path/to/document.pdf --output output/directory
+content-accessibilty-utility-on-aws process --input path/to/document.pdf --output output/directory
 ```
 
 This command runs the full workflow:
@@ -328,13 +328,13 @@ Options:
 ### Use a configuration file
 
 ```bash
-content-accessibility-with-aws convert --config my-config.yaml --input document.pdf
+content-accessibilty-utility-on-aws convert --config my-config.yaml --input document.pdf
 ```
 
 ### Override config file settings with command-line arguments
 
 ```bash
-content-accessibility-with-aws audit --config my-config.yaml --severity major --input document.html
+content-accessibilty-utility-on-aws audit --config my-config.yaml --severity major --input document.html
 ```
 
 ## Common Options

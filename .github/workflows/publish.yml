@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/content-accessibility-with-aws
+      url: https://pypi.org/p/content-accessibility-utility-on-aws
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
 
@@ -105,7 +105,7 @@ jobs:
 
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/content-accessibility-with-aws
+      url: https://test.pypi.org/p/content-accessibility-utility-on-aws
 
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing

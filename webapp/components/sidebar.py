@@ -8,7 +8,7 @@ Sidebar components for the Document Accessibility Streamlit application.
 import streamlit as st
 from typing import Dict, Any, Tuple, Optional
 
-from content_accessibility_with_aws import __version__ as current_version
+from content_accessibility_utility_on_aws import __version__ as current_version
 from utils.file_utils import detect_file_type
 
 

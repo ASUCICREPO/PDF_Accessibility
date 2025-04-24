@@ -6,13 +6,13 @@ requires = ["setuptools>=64.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "content-accessibility-with-aws"
+name = "content-accessibility-utility-on-aws"
 dynamic = ["version"]
 authors = [
     { name = "Addie Rudy <awsrudy@amazon.com>;" }
 ]
 license = "Apache-2.0"
-description = "Convert PDF documents to accessible HTML, audit for accessibility issues, and remediate them"
+description = "The “Content Accessibility Utility on AWS” offers a comprehensive solution for modernizing web content accessibility with state-of-the-art Generative AI models, powered by Amazon Bedrock. “Content Accessibility Utility on AWS” allows users to automatically audit and remediate WCAG 2.1 accessibility compliance issues."
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [
@@ -42,23 +42,23 @@ WebApp = [
 ]
 
 [project.urls]
-"Bug Tracker" = "https://github.com/awslabs/content-accessibility-with-aws/issues"
-"Documentation" = "https://github.com/awslabs/content-accessibility-with-aws"
-"Source Code" = "https://github.com/awslabs/content-accessibility-with-aws"
+"Bug Tracker" = "https://github.com/awslabs/content-accessibility-utility-on-aws/issues"
+"Documentation" = "https://github.com/awslabs/content-accessibility-utility-on-aws"
+"Source Code" = "https://github.com/awslabs/content-accessibility-utility-on-aws"
 
 [project.scripts]
-content-accessibility = "content_accessibility_with_aws.cli:main"
-content-accessibility-with-aws = "content_accessibility_with_aws.cli:main"
+content-accessibility-utility = "content_accessibility_utility_on_aws.cli:main"
+content-accessibility-utility-on-aws = "content_accessibility_utility_on_aws.cli:main"
 
 
 [tool.setuptools]
-packages = { find = { include = ["content_accessibility_with_aws*"] } }
+packages = { find = { include = ["content_accessibility_utility_on_aws*"] } }
 
 [tool.setuptools.package-data]
 content_accessibility_with_aws = ["**/*.html"]
 
 [tool.setuptools.dynamic]
-version = { attr = "content_accessibility_with_aws.__version__" }
+version = { attr = "content_accessibility_utility_on_aws.__version__" }
 
 [tool.pip-licenses]
 format = "markdown"

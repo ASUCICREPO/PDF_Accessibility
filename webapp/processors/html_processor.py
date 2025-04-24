@@ -10,7 +10,7 @@ import logging
 import streamlit as st
 from typing import Dict, Any, Optional, Tuple
 
-from content_accessibility_with_aws.api import audit_html_accessibility, remediate_html_accessibility, generate_remediation_report
+from content_accessibility_utility_on_aws.api import audit_html_accessibility, remediate_html_accessibility, generate_remediation_report
 
 from config.app_config_local import Config
 

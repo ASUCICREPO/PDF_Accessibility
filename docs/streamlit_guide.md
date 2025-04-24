@@ -79,7 +79,7 @@ The Document Accessibility Streamlit interface provides a user-friendly web appl
 Run the Streamlit interface:
 
 ```bash
-streamlit run /path/to/content-accessibility-with-aws/streamlit_app.py
+streamlit run /path/to/content-accessibilty-utility-on-aws/streamlit_app.py
 ```
 
 This will launch a local web server and open the application in your default browser.

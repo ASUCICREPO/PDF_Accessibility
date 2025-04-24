@@ -9,7 +9,7 @@ import logging
 import streamlit as st
 from typing import Dict, Any, Optional, Tuple
 
-from content_accessibility_with_aws.api import process_pdf_accessibility
+from content_accessibility_utility_on_aws.api import process_pdf_accessibility
 
 from utils.aws_utils import display_aws_warning, display_html_upload_notice
 from config.app_config_local import Config

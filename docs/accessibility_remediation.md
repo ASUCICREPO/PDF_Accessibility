@@ -25,12 +25,12 @@ You can remediate accessibility issues in two ways:
 
 1. **As part of PDF conversion**:
    ```bash
-   content-accessibility-with-aws process --input path/to/input.pdf --output output/ --perform-remediation
+   content-accessibilty-utility-on-aws process --input path/to/input.pdf --output output/ --perform-remediation
    ```
 
 2. **For an existing HTML file with an audit report**:
    ```bash
-   content-accessibility-with-aws remediate --input path/to/existing.html --output remediated.html
+   content-accessibilty-utility-on-aws remediate --input path/to/existing.html --output remediated.html
    ```
 
 #### Available CLI Options
@@ -112,7 +112,7 @@ See the `tests/test_accessibility_remediation.py` script for a complete example.
 You can specify different Bedrock model IDs for remediation:
 
 ```bash
-content-accessibility-with-aws remediate --input document.html --output remediated.html --model-id amazon.nova-lite-v1:0
+content-accessibilty-utility-on-aws remediate --input document.html --output remediated.html --model-id amazon.nova-lite-v1:0
 ```
 
 ### Filtered Remediation
@@ -120,7 +120,7 @@ content-accessibility-with-aws remediate --input document.html --output remediat
 Process only specific issue types:
 
 ```bash
-content-accessibility-with-aws remediate --input document.html --output remediated.html --issue-types missing-alt-text,empty-alt-text
+content-accessibilty-utility-on-aws remediate --input document.html --output remediated.html --issue-types missing-alt-text,empty-alt-text
 ```
 
 ### Severity-Based Remediation
@@ -128,7 +128,7 @@ content-accessibility-with-aws remediate --input document.html --output remediat
 Focus on the most important issues:
 
 ```bash
-content-accessibility-with-aws remediate --input document.html --output remediated.html --severity-threshold critical
+content-accessibilty-utility-on-aws remediate --input document.html --output remediated.html --severity-threshold critical
 ```
 
 ## Limitations
