@@ -3,7 +3,7 @@
  SPDX-License-Identifier: Apache-2.0
 -->
 
-# Content Accessibility with AWS
+# Content Accessibility Utility on AWS
 
 Digital content stakeholders across industries aim to streamline how they meet accessibility compliance standards efficiently. The “Content Accessibility Utility on AWS” offers a comprehensive solution for modernizing web content accessibility with state-of-the-art Generative AI models, powered by Amazon Bedrock. “Content Accessibility Utility on AWS” allows users to automatically audit and remediate WCAG 2.1 accessibility compliance issues. To get started, the solution offers a Python CLI and API. Capabilities currently include batch processing capabilities for handling large volumes of content efficiently, usage tracking to enable detailed cost management, and will continue to expand capabilities to support other content type and modals.
 
