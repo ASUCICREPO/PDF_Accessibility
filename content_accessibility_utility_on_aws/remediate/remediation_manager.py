@@ -466,11 +466,26 @@ class RemediationManager:
                     ),
                     "file_path": issue.get("file_path")
                     or (issue.get("location", {}) or {}).get("file_path", ""),
+                    "file_name": issue.get("file_name")
+                    or (issue.get("location", {}) or {}).get("file_name", ""),
+                    "page_number": issue.get("page_number")
+                    or (issue.get("location", {}) or {}).get("page_number"),
                 }
 
                 # For unified format in report generation, include a location field if not present
-                if "location" not in detail and "file_path" in detail:
-                    detail["location"] = {"file_path": detail["file_path"]}
+                if "location" not in detail:
+                    detail["location"] = {
+                        "file_path": detail.get("file_path", ""),
+                        "file_name": detail.get("file_name", ""),
+                        "page_number": detail.get("page_number")
+                    }
+                    # Add a human-readable description
+                    if detail.get("file_name") and detail.get("page_number") is not None:
+                        detail["location"]["description"] = f"File: {detail['file_name']} (Page {detail['page_number']})"
+                    elif detail.get("file_name"):
+                        detail["location"]["description"] = f"File: {detail['file_name']}"
+                    elif detail.get("page_number") is not None:
+                        detail["location"]["description"] = f"Page {detail['page_number']}"
 
                 # Track changes applied to this issue
                 if result:
@@ -541,11 +556,26 @@ class RemediationManager:
                     "changes_applied": 0,
                     "file_path": issue.get("file_path")
                     or (issue.get("location", {}) or {}).get("file_path", ""),
+                    "file_name": issue.get("file_name")
+                    or (issue.get("location", {}) or {}).get("file_name", ""),
+                    "page_number": issue.get("page_number")
+                    or (issue.get("location", {}) or {}).get("page_number"),
                 }
 
                 # For unified format in report generation, include a location field if not present
-                if "location" not in detail and "file_path" in detail:
-                    detail["location"] = {"file_path": detail["file_path"]}
+                if "location" not in detail:
+                    detail["location"] = {
+                        "file_path": detail.get("file_path", ""),
+                        "file_name": detail.get("file_name", ""),
+                        "page_number": detail.get("page_number")
+                    }
+                    # Add a human-readable description
+                    if detail.get("file_name") and detail.get("page_number") is not None:
+                        detail["location"]["description"] = f"File: {detail['file_name']} (Page {detail['page_number']})"
+                    elif detail.get("file_name"):
+                        detail["location"]["description"] = f"File: {detail['file_name']}"
+                    elif detail.get("page_number") is not None:
+                        detail["location"]["description"] = f"Page {detail['page_number']}"
 
                 # Set result to None for failure counting
                 result = None

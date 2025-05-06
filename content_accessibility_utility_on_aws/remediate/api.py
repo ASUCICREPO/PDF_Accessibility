@@ -219,46 +219,43 @@ def remediate_html_accessibility(
 
                                 # Try multiple places where the path might be stored
                                 issue_path = issue.get("file_path", "")
-                                if (
-                                    not issue_path
-                                    and "location" in issue
-                                    and issue["location"]
-                                ):
-                                    issue_path = issue["location"].get("file_path", "")
+                                issue_file_name = issue.get("file_name", "")
+                                issue_page_number = issue.get("page_number")
+                                
+                                # Check location field if root level fields aren't available
+                                if "location" in issue and issue["location"]:
+                                    if not issue_path:
+                                        issue_path = issue["location"].get("file_path", "")
+                                    if not issue_file_name:
+                                        issue_file_name = issue["location"].get("file_name", "")
+                                    if issue_page_number is None:
+                                        issue_page_number = issue["location"].get("page_number")
 
-                                # If no file path in issue, we'll try to match by page number
-                                if (
-                                    not issue_path
-                                    and "location" in issue
-                                    and issue["location"]
-                                ):
-                                    page_num = issue["location"].get("page_number")
-                                    if page_num is not None:
-                                        # Try to extract page number from filename
-                                        match = re.search(
-                                            r"page[_-]?(\d+)\.html$",
-                                            os.path.basename(html_file),
-                                            re.IGNORECASE,
-                                        )
-                                        if match and int(match.group(1)) == page_num:
-                                            # Match by page number
-                                            file_issues.append(issue)
-                                            continue
-
-                                # If there is a file path, try different matching approaches
-                                if issue_path:
-                                    if (
-                                        issue_path == html_file
-                                        or os.path.basename(issue_path)
-                                        == os.path.basename(html_file)
-                                        or os.path.abspath(issue_path)
-                                        == os.path.abspath(html_file)
-                                    ):
+                                # Get current file name for comparison
+                                current_file_name = os.path.basename(html_file)
+                                
+                                # Match by file path (exact or basename)
+                                if issue_path and (issue_path == html_file or 
+                                                  os.path.basename(issue_path) == current_file_name or
+                                                  os.path.abspath(issue_path) == os.path.abspath(html_file)):
+                                    file_issues.append(issue)
+                                    continue
+                                    
+                                # Match by file name
+                                if issue_file_name and issue_file_name == current_file_name:
+                                    file_issues.append(issue)
+                                    continue
+                                
+                                # Match by page number (extracted from filename)
+                                if issue_page_number is not None:
+                                    match = re.search(r"page[_-]?(\d+)\.html$", current_file_name, re.IGNORECASE)
+                                    if match and int(match.group(1)) == issue_page_number:
                                         file_issues.append(issue)
                                         continue
 
-                                # If no file_path found and this is the first HTML file, assign all issues with no file path to it
-                                if not issue_path and html_file == html_files[0]:
+                                # If no file_path, file_name, or page_number found and this is the first HTML file, 
+                                # assign all issues with no location info to it
+                                if not issue_path and not issue_file_name and issue_page_number is None and html_file == html_files[0]:
                                     file_issues.append(issue)
 
                             # Log the number of issues found for this file
