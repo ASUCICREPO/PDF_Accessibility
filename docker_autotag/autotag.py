@@ -518,55 +518,82 @@ def extract_images_from_excel(filename, figure_path, autotag_report_path, images
         s3_folder_autotag (str): The S3 folder for autotag output.
         file_key (str): File key for S3 naming.
     """
-    logging.info(f'Filename : {filename} | Extracting the images from excel file...')
-    
-    # Load the workbook and get the sheet (Images are in the "Figures" sheet)
-    wb = openpyxl.load_workbook(autotag_report_path)
-    wb.close()
-    sheet = wb["Figures"]
-    logging.info(f'Filename : {filename} | Sheet: {sheet.title}')
-    logging.info(f'Filename : {filename} | Number of images: {len(sheet._images)}')
-    
-    # Load the workbook into a DataFrame for additional details.
-    df = pd.read_excel(autotag_report_path, sheet_name="Figures")
-    logging.info(f'Filename : {filename} | DF loaded: {str(df)}')
-    # Get the object IDs
-    object_ids = df["Unnamed: 4"].dropna().values[1:]
-    # Get page numbers for images (adjusting for 0-indexing)
-    page_num_img = df["Figures and Alt Text (excludes artifacts and decorative images)"].dropna().values[2:].astype(int)
-    page_num_img = [int(i)-1 for i in page_num_img]
-    
-    os.makedirs(images_output_dir, exist_ok=True)
+    try:
+        logging.info(f'Filename : {filename} | Extracting the images from excel file...')
+        
+        # Load the workbook and get the sheet (Images are in the "Figures" sheet)
+        wb = openpyxl.load_workbook(autotag_report_path)
+        wb.close()
+        sheet = wb["Figures"]
+        logging.info(f'Filename : {filename} | Sheet: {sheet.title}')
+        logging.info(f'Filename : {filename} | Number of images: {len(sheet._images)}')
+        
+        # Load the workbook into a DataFrame for additional details.
+        df = pd.read_excel(autotag_report_path, sheet_name="Figures")
+        logging.info(f'Filename : {filename} | DF loaded: {str(df)}')
+        # Get the object IDs
+        object_ids = df["Unnamed: 4"].dropna().values[1:]
+        # Get page numbers for images (adjusting for 0-indexing)
+        page_num_img = df["Figures and Alt Text (excludes artifacts and decorative images)"].dropna().values[2:].astype(int)
+        page_num_img = [int(i)-1 for i in page_num_img]
+        
+        os.makedirs(images_output_dir, exist_ok=True)
 
-    by_page = extract_images_from_extract_api(filename)
-    image_paths = []
-    coordinates = df["Unnamed: 3"].dropna().values[1:]
-    parsed_cordinates = [ast.literal_eval(item) for item in coordinates]
-    object_ids_cords = [(objid, cords) for objid, cords in zip(object_ids, parsed_cordinates)]
-    print("Object IDs and Coordinates:", object_ids_cords)
-    logging.info(f'Filename : {filename} | Sheet: {sheet} , Sheet Images: {sheet._images}')
+        by_page = extract_images_from_extract_api(filename)
+        image_paths = []
+        coordinates = df["Unnamed: 3"].dropna().values[1:]
+        parsed_cordinates = [ast.literal_eval(item) for item in coordinates]
+        object_ids_cords = [(objid, cords) for objid, cords in zip(object_ids, parsed_cordinates)]
+        print("Object IDs and Coordinates:", object_ids_cords)
+        logging.info(f'Filename : {filename} | Sheet: {sheet} , Sheet Images: {sheet._images}')
 
-    # Loop through all images in the sheet and save them locally.
-    for idx, img in enumerate(sheet._images):
-        img_type = img.path.split('.')[-1]
-        img_path = os.path.join(images_output_dir, f'image_{idx + 1}.{img_type}')
-        image_paths.append(img_path)
-        with open(img_path, 'wb') as f:
-            f.write(img._data())
-        logging.info(f'Filename : {filename} | Image {idx + 1} saved as {img_path}')
-    
-    image_paths = [
-        os.path.join(figure_path, f)
-        for f in sorted(os.listdir(figure_path), key=natural_sort_key)
-    ]
-    
-    for img_path in image_paths:
-        s3.upload_file(img_path, bucket_name, f'{s3_folder_autotag}/images/{file_key}_{os.path.basename(img_path)}')
-        logging.info(f'Filename : {filename} | Uploaded image to S3')
-    logging.info(f'Filename : {filename} | Object IDs: {object_ids} : Image Paths: {image_paths}')
+        # Loop through all images in the sheet and save them locally.
+        for idx, img in enumerate(sheet._images):
+            img_type = img.path.split('.')[-1]
+            img_path = os.path.join(images_output_dir, f'image_{idx + 1}.{img_type}')
+            image_paths.append(img_path)
+            with open(img_path, 'wb') as f:
+                f.write(img._data())
+            logging.info(f'Filename : {filename} | Image {idx + 1} saved as {img_path}')
+        
+        image_paths = [
+            os.path.join(figure_path, f)
+            for f in sorted(os.listdir(figure_path), key=natural_sort_key)
+        ]
+        
+        for img_path in image_paths:
+            s3.upload_file(img_path, bucket_name, f'{s3_folder_autotag}/images/{file_key}_{os.path.basename(img_path)}')
+            logging.info(f'Filename : {filename} | Uploaded image to S3')
+        logging.info(f'Filename : {filename} | Object IDs: {object_ids} : Image Paths: {image_paths}')
 
-    create_sqlite_db(by_page, filename, images_output_dir, object_ids, image_paths, page_num_img, parsed_cordinates, bucket_name, s3_folder_autotag, file_key, object_ids_cords)
-
+        create_sqlite_db(by_page, filename, images_output_dir, object_ids, image_paths, page_num_img, parsed_cordinates, bucket_name, s3_folder_autotag, file_key, object_ids_cords)
+    except Exception as e:
+        db_path = os.path.join(images_output_dir, "temp_images_data.db")
+        if os.path.exists(db_path):
+            os.remove(db_path)
+            logging.info(f'Filename : {filename} | Removed existing SQLite DB')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS image_data (
+                objid TEXT,
+                img_path TEXT,
+                prev TEXT,
+                current TEXT,
+                next TEXT,
+                context TEXT
+            )
+        """)
+        
+        conn.commit()
+        conn.close()
+        logging.info(f'Filename : {filename} | SQLite DB created with image data')
+        
+        # Upload the SQLite DB to S3.
+        s3.upload_file(os.path.join(images_output_dir, "temp_images_data.db"),
+                        bucket_name,
+                        f'{s3_folder_autotag}/{file_key}_temp_images_data.db')
+        logging.info(f'Filename : {filename} | Uploaded SQLite DB to S3 With No Images')
 
 def main():
     """
