@@ -12,3 +12,4 @@ app/static/*  # Streamlit static files that get dynamically added there.
 *.egg-info/*
 *.egg/*
 dist/*
+test_files/*

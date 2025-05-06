@@ -11,3 +11,4 @@ pydantic>=2.10.6  # For data validation and parsing
 defusedcsv>=2.0.0 # For CSV parsing
 Flask>=3.1.0    # For HTML Template Parsing
 PyYaml>=6.0.0    # For YAML parsing
+pypdf>=5.4.0    
