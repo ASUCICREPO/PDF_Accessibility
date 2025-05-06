@@ -68,7 +68,7 @@ def preprocess_tables(html: str) -> str:
         html: The HTML content to process
 
     Returns:
-        Preprocessed HTML with improved table structure
+        Preprocessed HTML with improved table structure with proper borders
     """
     soup = BeautifulSoup(html, "html.parser")
     tables = soup.find_all("table")
@@ -79,6 +79,23 @@ def preprocess_tables(html: str) -> str:
         # Skip empty tables
         if not table.find("tr"):
             continue
+
+        # Add 1px solid border to table
+        table_style = table.get("style", "")
+        if "border" not in table_style.lower():
+            table["style"] = f"{table_style}; border: 1px solid black; border-collapse: collapse;"
+
+        # Add borders to all cells (th and td)
+        for cell in table.find_all(["th", "td"]):
+            cell_style = cell.get("style", "")
+            if "border" not in cell_style.lower():
+                cell["style"] = f"{cell_style}; border: 1px solid black;"
+
+        # Add borders to all rows
+        for row in table.find_all("tr"):
+            row_style = row.get("style", "")
+            if "border" not in row_style.lower():
+                row["style"] = f"{row_style}; border: 1px solid black;"
 
         # Skip tables that already have proper structure
         if table.find("thead") and table.find("tbody"):
@@ -107,6 +124,10 @@ def preprocess_tables(html: str) -> str:
                         new_th[attr] = value
                 # Copy contents
                 new_th.extend(td.contents)
+                # Ensure header cells have border
+                th_style = new_th.get("style", "")
+                if "border" not in th_style.lower():
+                    new_th["style"] = f"{th_style}; border: 1px solid black;"
                 td.replace_with(new_th)
 
             # Add the modified first row to thead
