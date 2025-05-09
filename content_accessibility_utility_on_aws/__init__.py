@@ -13,4 +13,4 @@ Main Components:
 - HTML accessibility remediation
 """
 
-__version__ = "0.6.1"  # Main project uses this version!
+__version__ = "0.6.2"  # Main project uses this version!
