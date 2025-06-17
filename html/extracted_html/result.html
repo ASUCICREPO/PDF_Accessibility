@@ -1,0 +1,211 @@
+<html>
+<body>
+<h1>PDF Accessibility Remediation UI - Installation Guide</h1>
+
+<p>This guide provides detailed instructions for deploying the PDF Accessibility Remediation UI in your environment. This UI works in conjunction with the backend PDF Accessibility project to provide a complete solution for PDF accessibility remediation.</p>
+
+<h2>Prerequisites</h2>
+
+<p>Before you begin, ensure you have the following:</p>
+
+<ul><li><p>1. <b>AWS Account</b> with appropriate permissions to create resources</p>
+</li><li><p>2. (version or later) <a href="Node.js"> <b>Node.js</b> </a> <a href="14.x"> 14.x </a></p>
+</li><li><p>3. <b>AWS CLI</b> installed and configured with appropriate credentials</p>
+</li><li><p>4. <b>AWS CDK CLI</b> installed (npm install -g aws-cdk)</p>
+</li><li><p>5. <b>Git</b> for version control</p>
+</li><li><p>6. <b>Python</b> for Lambda functions <a href="3.9"> <b>3.9</b> </a></p>
+</li><li><p>7. <b>GitHub Personal Access Token</b> with repository access permissions</p>
+</li><li><p>8. <b>Backend Deployment -</b> The project must be deployed first <a href="https://github.com/ASUCICREPO/PDF_Accessibility"> PDF Accessibility_(https://github.com/ASUCICREPO/PDF Accessibility) </a></p></li></ul>
+
+<h2>Step 1: Deploy the Backend PDF Accessibility Project</h2>
+
+<p>Before deploying this UI, you must first deploy the backend PDF Accessibility project:</p>
+
+<ul><li><p>1. Clone the backend repository:</p>
+</li><li><p>git clone <a href="https://github.com/ASUCICREPO/PDF_Accessibility.git"> https://github.com/ASUCICREPO/PDF_Accessibility.git </a> cd PDF_Accessibility</p>
+</li><li><p>2. Follow the installation instructions in the backend repository to deploy it completely.</p>
+</li><li><p>3. <b>Important:</b> Take note of the S3 bucket name created during the backend deployment. You will need this for the UI deployment.</p></li></ul>
+
+<h2>Step 2: Clone the UI Repository</h2>
+
+<ul><li><p>1. Clone this repository:</p></li></ul>
+
+<p>git clone <a href="https://github.com/ASUCICREPO/PDF_accessability_UI.git"> https://github.com/ASUCICREPO/PDF_accessability_UI.git </a> cd PDF_accessability_UI</p>
+
+<h2>Step 3: Install Dependencies</h2>
+
+<ul><li><p>1. Install backend dependencies:</p></li></ul>
+
+<p>cd cdk_backend npm install</p><h2>2. Install frontend dependencies:</h2>
+
+<div>cd ./pdf_ui
+
+npm install</div>
+
+<h2>Step 4: Configure and Deploy the CDK Backend</h2>
+
+<div>1. Return to the cdk_backend directory:
+
+cd ../cdk_backend
+
+2. Modify the domain prefix in the CDK stack:
+
+Open the file dk_backend/lib/cdk_backend-stack.ts and locate this line:
+
+const domainPrefix = &#x27;pdf-ui-auth&#x27;; // must be globally unique in that region
+
+Change pdf-ui-auth to a unique name of your choice. This domain prefix must be globally unique within the AWS region you&#x27;re deploying
+
+to.
+
+3. Bootstrap your AWS environment (if not already done):
+
+cdk bootstrap -c githubToken=&lt;your-github-token&gt; -c PebucketName=&lt;s3-bucket-name-from-backend-deployment&gt;
+
+4. Deploy the infrastructure:
+
+cdk deploy -c githubToken=&lt;your-github-token&gt; -c bucketName=&lt;s3-bucket-name-from-backend-deployment&gt;
+
+Replace:
+
+&lt;your-github-token&gt; with your GitHub Personal Access Token
+ &lt;s3-bucket-name-from-backend-deployment&gt; with the S3 bucket name from the backend deployment
+
+5. The deployment will create several AWS resources including:
+
+Cognito User Pool and Identity Pool
+ Amplify application for hosting the UI
+ IAM roles and policies
+ Lambda functions for user management
+
+6. Take note of the outputs from the CDK deployment, especially the Amplify app URL.</div>
+
+<h2>Step 5: Configure S3 Bucket CORS Settings</h2>
+
+<p>After deployment, you need to configure CORS settings for the S3 bucket to allow cross-origin requests from the UI:</p>
+
+<ul><li><p>1. Go to the AWS Management Console</p>
+</li><li><p>2. Navigate to S3 service</p>
+</li><li><p>3. Select the S3 bucket that was created during the backend deployment</p>
+</li><li><p>4. Click on the &quot;Permissions&quot; tab</p>
+</li><li><p>5. Scroll down to the &quot;Cross-origin resource sharing (CORS)&quot; section</p>
+</li><li><p>6. Click &quot;Edit&quot; and add the following CORS configuration:</p></li></ul><p>[ { &quot;AllowedHeaders&quot; : [ &quot;&quot;&quot; ], &quot;AllowedMethods&quot; : [ &quot;GET&quot;, &quot;HEAD&quot;, &quot;PUT&quot;, &quot;POST&quot;, &quot;DELETE&quot; 1, &quot;AllowedOrigins&quot;: [ &quot;&quot;&quot; ], &quot;ExposeHeaders&quot; : [] } ]</p>
+
+<p>7. Click &quot;Save changes&quot;</p>
+
+<h2>Step 6: Configure AWS Amplify Redirect and Rewrite Rules</h2>
+
+<p>After the Amplify app is deployed, you need to configure redirect and rewrite rules:</p>
+
+<ul><li><p>1. Go to the AWS Management Console</p>
+</li><li><p>2. Navigate to AWS Amplify service</p>
+</li><li><p>3. Select your newly deployed application</p>
+</li><li><p>4. Go to &quot;Hosting&quot; &quot;Rewrites and redirects&quot;</p>
+</li><li><p>5. Delete any existing rules</p>
+</li><li><p>6. Add the following rules:</p></li></ul><p>[		
+{		
+	"source": "/</^[^.]+$/\\ (?! (css I gif ico jpg S png I txt svg I woff woff2 I ttf map |j son) $) ([^.]+$)/>",	
+	"status": "301",	
+	"target": "/index.html"	
+},		
+{		
+	"source": "/home",	
+	"status": "200",	
+	"target": "/index.html"	
+},		
+{		
+	"source": "/callback",	
+	"status": "200",	
+	"target": "/index.html"	
+},		
+{		
+	"source": "/app",	
+	"status": "200",	
+	"target": "/index.html"	
+}		
+]		
+</p>
+
+<p><b>Important Note:</b> These rules need to be added AFTER the application is done building. If you need to deploy a new update, you should:</p>
+
+<ul><li><p>1. Delete these rules</p>
+</li><li><p>2. Deploy the update</p>
+</li><li><p>3. Re-add these rules after the build is complete</p></li></ul>
+
+<h2>Step 7: Testing the Deployment</h2>
+
+<ul><li><p>1. Access your application using the Amplify app URL (from the CDK deployment outputs)</p>
+</li><li><p>2. You should see the login page for the PDF Accessibility Remediation UI</p>
+</li><li><p>3. Create a new account or sign in with existing credentials</p>
+</li><li><p>4. Upload a PDF file to test the accessibility remediation process</p></li></ul>
+
+<p><b>Troubleshooting Authentication Issues</b></p>
+
+<ul><li><p>If you encounter &quot;No matching state found&quot; errors:</p>
+</li><li><p>Clear browser cookies and cache</p>
+</li><li><p>Ensure correct Cognito configuration in environment variables</p>
+</li><li><p>Check redirect URIs in Cognito user pool client settings</p></li></ul>
+
+<p><b>Upload Failures</b></p>
+
+<ul><li><p>Check file size limits in user attributes</p>
+</li><li><p>Verify S3 bucket permissions</p>
+</li><li><p>Check CORS configuration on the S3 bucket</p></li></ul>
+
+<div><b>PDF Processing Errors</b></div><ul><li><p>Check CloudWatch logs for Lambda functions</p>
+</li><li><p>Verify Adobe API credentials</p>
+</li><li><p>Monitor ECS task status</p></li></ul>
+
+<h2>Amplify Deployment Issues</h2>
+
+<ul><li><p>If the application doesn&#x27;t load correctly, verify the redirect and rewrite rules</p>
+</li><li><p>Check the Amplify build logs for any errors</p>
+</li><li><p>Ensure the GitHub token has the necessary permissions</p></li></ul>
+
+<h2>Additional Configuration</h2>
+
+<p><b>Custom Domain (Optional)</b></p>
+
+<p>If you want to use a custom domain for your application:</p>
+
+<ul><li><p>1. Go to the AWS Amplify console</p>
+</li><li><p>2. Select your application</p>
+</li><li><p>3. Go to &quot;Domain management&quot;</p>
+</li><li><p>4. Follow the instructions to add and verify your domain</p></li></ul>
+
+<h2>User Management</h2>
+
+<p>By default, the application creates three user groups:</p>
+
+<ul><li><p>DefaultUsers: Regular users with standard permissions</p>
+</li><li><p>AmazonUsers: Users with Amazon email addresses</p>
+</li><li><p>AdminUsers: Users with administrative privileges</p></li></ul>
+
+<p>To manage users and their permissions:</p>
+
+<ul><li><p>1. Go to the AWS Cognito console</p>
+</li><li><p>2. Select the user pool created for this application</p>
+</li><li><p>3. Navigate to &quot;Users and groups&quot; to manage users and their group memberships</p></li></ul>
+
+<h2>Security Considerations</h2>
+
+<ul><li><p>The CORS configuration provided allows requests from any origin (*). For production environments, you should restrict this to specific domains.</p>
+</li><li><p>Review the IAM roles and permissions created by the CDK deployment to ensure they follow the principle of least privilege.</p>
+</li><li><p>Consider implementing additional security measures such as WAF rules for the Amplify application.</p></li></ul>
+
+<h2>Maintenance and Updates</h2>
+
+<p>When updating the application:</p>
+
+<ul><li><p>1. Make your changes to the code</p>
+</li><li><p>2. For frontend changes:</p>
+</li><li><p>cd pdf_ui npm run build</p>
+</li><li><p>3. For backend changes, redeploy the CDK stack:</p></li></ul><p>cd cdk_backend cdk deploy -c githubToken=&lt;your-github-token&gt; -c bucketName=&lt;s3-bucket-name&gt;</p>
+
+<ul><li><p>4. Remember to reconfigure the Amplify redirect and rewrite rules after each deployment</p></li></ul>
+
+<h2>Support</h2>
+
+<p>If you encounter any issues or have questions, please open an issue on the GitHub repository.</p>
+</body>
+</html>

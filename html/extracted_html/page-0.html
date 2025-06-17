@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page 1</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; }
+    </style>
+</head>
+<body>
+<h1>PDF Accessibility Remediation UI - Installation Guide</h1>
+
+<p>This guide provides detailed instructions for deploying the PDF Accessibility Remediation UI in your environment. This UI works in conjunction with the backend PDF Accessibility project to provide a complete solution for PDF accessibility remediation.</p>
+
+<h2>Prerequisites</h2>
+
+<p>Before you begin, ensure you have the following:</p>
+
+<ul><li><p>1. <b>AWS Account</b> with appropriate permissions to create resources</p>
+</li><li><p>2. (version or later) <a href="Node.js"> <b>Node.js</b> </a> <a href="14.x"> 14.x </a></p>
+</li><li><p>3. <b>AWS CLI</b> installed and configured with appropriate credentials</p>
+</li><li><p>4. <b>AWS CDK CLI</b> installed (npm install -g aws-cdk)</p>
+</li><li><p>5. <b>Git</b> for version control</p>
+</li><li><p>6. <b>Python</b> for Lambda functions <a href="3.9"> <b>3.9</b> </a></p>
+</li><li><p>7. <b>GitHub Personal Access Token</b> with repository access permissions</p>
+</li><li><p>8. <b>Backend Deployment -</b> The project must be deployed first <a href="https://github.com/ASUCICREPO/PDF_Accessibility"> PDF Accessibility_(https://github.com/ASUCICREPO/PDF Accessibility) </a></p></li></ul>
+
+<h2>Step 1: Deploy the Backend PDF Accessibility Project</h2>
+
+<p>Before deploying this UI, you must first deploy the backend PDF Accessibility project:</p>
+
+<ul><li><p>1. Clone the backend repository:</p>
+</li><li><p>git clone <a href="https://github.com/ASUCICREPO/PDF_Accessibility.git"> https://github.com/ASUCICREPO/PDF_Accessibility.git </a> cd PDF_Accessibility</p>
+</li><li><p>2. Follow the installation instructions in the backend repository to deploy it completely.</p>
+</li><li><p>3. <b>Important:</b> Take note of the S3 bucket name created during the backend deployment. You will need this for the UI deployment.</p></li></ul>
+
+<h2>Step 2: Clone the UI Repository</h2>
+
+<ul><li><p>1. Clone this repository:</p></li></ul>
+
+<p>git clone <a href="https://github.com/ASUCICREPO/PDF_accessability_UI.git"> https://github.com/ASUCICREPO/PDF_accessability_UI.git </a> cd PDF_accessability_UI</p>
+
+<h2>Step 3: Install Dependencies</h2>
+
+<ul><li><p>1. Install backend dependencies:</p></li></ul>
+
+<p>cd cdk_backend npm install</p>
+</body>
+</html>
