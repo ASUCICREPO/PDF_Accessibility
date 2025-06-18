@@ -271,7 +271,7 @@ def update_image_references(soup: BeautifulSoup, path_mapping: dict) -> None:
 
 
 def copy_images_to_output(
-    src_dir: str, dest_dir: str, html_soup: BeautifulSoup
+    src_dir: str, dest_dir: str, html_soup: BeautifulSoup, use_images_prefix: bool = False
 ) -> dict:
     """
     Copy all image files from source directory to destination directory and update image paths.
@@ -308,7 +308,11 @@ def copy_images_to_output(
             # Check if destination already exists
             if os.path.exists(dest_path):
                 logger.debug(f"Image already exists at destination: {dest_path}")
-                rel_path = f"./{filename}"
+                # Use images/ prefix if requested
+                if use_images_prefix:
+                    rel_path = f"./images/{filename}"
+                else:
+                    rel_path = f"./{filename}"
                 img["src"] = rel_path
                 path_mapping[filename] = rel_path
                 continue
@@ -327,12 +331,18 @@ def copy_images_to_output(
                     found_filename = os.path.basename(src_path)
                     if found_filename != filename:
                         # Update the src attribute to use the found filename
-                        rel_path = f"./{found_filename}"
+                        if use_images_prefix:
+                            rel_path = f"./images/{found_filename}"
+                        else:
+                            rel_path = f"./{found_filename}"
                         img["src"] = rel_path
                         path_mapping[filename] = rel_path
                     else:
                         # Standard relative path
-                        rel_path = f"./{filename}"
+                        if use_images_prefix:
+                            rel_path = f"./images/{filename}"
+                        else:
+                            rel_path = f"./{filename}"
                         img["src"] = rel_path
                         path_mapping[filename] = rel_path
 
@@ -344,7 +354,10 @@ def copy_images_to_output(
                 not_found_count += 1
 
                 # Still update to use relative path
-                rel_path = f"./{filename}"
+                if use_images_prefix:
+                    rel_path = f"./images/{filename}"
+                else:
+                    rel_path = f"./{filename}"
                 img["src"] = rel_path
                 path_mapping[filename] = rel_path
 

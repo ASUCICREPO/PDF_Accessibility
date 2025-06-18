@@ -132,10 +132,8 @@ def remediate_html_accessibility(
                     with open(output_path, "r", encoding="utf-8") as f:
                         soup = BeautifulSoup(f.read(), "html.parser")
 
-                    # Copy images to output directory and update paths
-                    if image_dir:
-                        output_dir = os.path.dirname(output_path)
-                        copy_images_to_output(image_dir, output_dir, soup)
+                    # Skip copying images here - we'll do it once at the end to the images/ folder
+                    # This prevents duplicate images in the root directory
 
                     # Remediate the issues
                     remediation_result = _remediate_html_file(
@@ -159,11 +157,12 @@ def remediate_html_accessibility(
 
                     # Copy images if specified
                     if image_dir and os.path.exists(image_dir):
-                        images_dest_dir = os.path.join(os.path.dirname(output_path))
+                        # Create images subdirectory in the output directory
+                        images_dest_dir = os.path.join(os.path.dirname(output_path), "images")
                         logger.debug(
                             f"Copying images from {image_dir} to {images_dest_dir}"
                         )
-                        copy_images_to_output(image_dir, images_dest_dir, soup)
+                        copy_images_to_output(image_dir, images_dest_dir, soup, use_images_prefix=True)
 
                         # Write the updated HTML with image references back to the file
                         with open(output_path, "w", encoding="utf-8") as f:
@@ -275,10 +274,8 @@ def remediate_html_accessibility(
                             with open(output_file, "r", encoding="utf-8") as f:
                                 soup = BeautifulSoup(f.read(), "html.parser")
 
-                            # Copy images to output directory and update paths
-                            if image_dir:
-                                output_dir = os.path.dirname(output_file)
-                                copy_images_to_output(image_dir, output_dir, soup)
+                            # Skip copying images here - we'll do it once at the end to the images/ folder
+                            # This prevents duplicate images in the root directory
 
                             # Remediate the issues
                             file_result = _remediate_html_file(
@@ -336,7 +333,7 @@ def remediate_html_accessibility(
                                 logger.debug(
                                     f"Copying images from {image_dir} to {images_dest_dir}"
                                 )
-                                copy_images_to_output(image_dir, images_dest_dir, soup)
+                                copy_images_to_output(image_dir, images_dest_dir, soup, use_images_prefix=True)
 
                                 # Write the updated HTML with image references back to the file
                                 with open(output_file, "w", encoding="utf-8") as f:
