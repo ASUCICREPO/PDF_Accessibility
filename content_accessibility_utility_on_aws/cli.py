@@ -814,8 +814,18 @@ def run_process_command(args: Dict[str, Any]) -> int:
         # Extract profile if provided
         profile = args.get("profile")
 
-        # Create output directory
-        output_dir = args["output"]
+        # Create a temporary directory for processing
+        import tempfile
+        temp_output_dir = tempfile.mkdtemp(prefix="accessibility_")
+        logger.debug(f"Created temporary directory for processing: {temp_output_dir}")
+        
+        # Store the original output directory for later
+        final_output_dir = args["output"]
+        
+        # Use the temporary directory for processing
+        args["output"] = temp_output_dir
+        output_dir = temp_output_dir
+        
         os.makedirs(output_dir, exist_ok=True)
 
         # Step 1: Convert PDF to HTML
@@ -1067,9 +1077,60 @@ def run_process_command(args: Dict[str, Any]) -> int:
             if not args.get("quiet"):
                 logger.info("Remediation step skipped as requested")
 
+        # Zip all output files into a single zip file
+        from content_accessibility_utility_on_aws.utils.path_utils import zip_output_files
+        try:
+            # Get the input filename without extension
+            input_filename = os.path.splitext(os.path.basename(args["input"]))[0]
+            zip_filename = os.path.join(final_output_dir, f"{input_filename}.zip")
+            
+            # Collect all output files and folders to include in the zip
+            output_files = []
+            
+            # Add the HTML folder
+            html_dir = os.path.join(output_dir, "html")
+            if os.path.exists(html_dir):
+                output_files.append(html_dir)
+            
+            # Add the remediated HTML folder or file
+            remediated_path = remediate_result.get("remediated_html_path", "")
+            if remediated_path and os.path.exists(remediated_path):
+                output_files.append(remediated_path)
+            
+            # Add the audit report
+            audit_output = os.path.join(output_dir, f"audit_report.{args.get('audit_format', 'json')}")
+            if os.path.exists(audit_output):
+                output_files.append(audit_output)
+            
+            # Add the remediation report
+            report_format = args.get("format", "html")
+            if report_format == "md":
+                report_format = "html"
+            remediation_report = os.path.join(output_dir, f"remediation_report.{report_format}")
+            if os.path.exists(remediation_report):
+                output_files.append(remediation_report)
+            
+            # Create the zip file
+            if output_files:
+                zip_path = zip_output_files(output_files, zip_filename)
+                if not args.get("quiet"):
+                    print(f"\nAll output files zipped to: {zip_path}")
+        except Exception as e:
+            logger.error(f"Error zipping output files: {e}")
+            if not args.get("quiet"):
+                print(f"\nWarning: Failed to zip output files: {e}")
+                
+        # Clean up the temporary directory
+        try:
+            import shutil
+            shutil.rmtree(temp_output_dir)
+            logger.debug(f"Cleaned up temporary directory: {temp_output_dir}")
+        except Exception as e:
+            logger.error(f"Error cleaning up temporary directory: {e}")
+
         if not args.get("quiet"):
             print("\nProcess completed successfully!")
-            print(f"All output files are in: {output_dir}")
+            print(f"All output files are in: {zip_filename}")
 
         return 0
 

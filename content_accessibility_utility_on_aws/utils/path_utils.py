@@ -211,3 +211,51 @@ def match_issues_to_file(
         f"Matched {len(file_issues)} issues to file: {os.path.basename(html_file)}"
     )
     return file_issues
+def zip_output_files(output_files, zip_filename):
+    """
+    Zip specific output files and folders into a single zip file.
+
+    Args:
+        output_files: List of file and folder paths to include in the zip
+        zip_filename: Name of the zip file to create
+
+    Returns:
+        Path to the created zip file
+
+    Raises:
+        FileNotFoundError: If any of the files don't exist
+        IOError: If there's an error creating the zip file
+    """
+    import zipfile
+    import os
+    
+    logger.info(f"Creating zip archive {zip_filename} with {len(output_files)} files/folders")
+    
+    try:
+        with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # Process each file or folder
+            for file_path in output_files:
+                if not os.path.exists(file_path):
+                    logger.warning(f"File not found, skipping: {file_path}")
+                    continue
+                    
+                if os.path.isfile(file_path):
+                    # Add file directly with its basename
+                    zipf.write(file_path, os.path.basename(file_path))
+                    logger.debug(f"Added file to zip: {file_path}")
+                elif os.path.isdir(file_path):
+                    # For directories, add all files while preserving the directory structure
+                    dir_name = os.path.basename(file_path)
+                    for root, _, files in os.walk(file_path):
+                        for file in files:
+                            file_full_path = os.path.join(root, file)
+                            # Calculate relative path within the directory
+                            rel_path = os.path.join(dir_name, os.path.relpath(file_full_path, file_path))
+                            zipf.write(file_full_path, rel_path)
+                            logger.debug(f"Added to zip: {rel_path}")
+        
+        logger.info(f"Successfully created zip archive: {zip_filename}")
+        return zip_filename
+    except Exception as e:
+        logger.error(f"Error creating zip archive: {e}")
+        raise IOError(f"Failed to create zip archive: {e}")
