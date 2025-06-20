@@ -105,11 +105,11 @@ def _add_standardized_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--profile", help="AWS profile name to use for credentials")
     # Add S3 bucket parameter as a standardized parameter
     parser.add_argument("--s3-bucket", help="Name of an existing S3 bucket to use")
-    # Add option to upload remediated output to S3
+    # Add option to disable automatic upload of remediated output to S3
     parser.add_argument(
-        "--upload-remediated",
+        "--no-upload-remediated",
         action="store_true",
-        help="Upload remediated HTML output to S3 bucket under 'remediated' folder. Uses --s3-bucket parameter or BDA_S3_BUCKET environment variable."
+        help="Disable automatic upload of remediated HTML output to S3 bucket"
     )
 
     # AWS/BDA options
@@ -1105,8 +1105,9 @@ def run_process_command(args: Dict[str, Any]) -> int:
             if remediated_path and os.path.exists(remediated_path):
                 output_files.append(remediated_path)
                 
-                # Upload remediated HTML to S3 if requested and S3 bucket is provided
-                if args.get("upload_remediated"):
+                # Always try to upload remediated HTML to S3 if a bucket is available
+                # (either from args or environment variable) unless explicitly disabled
+                if not args.get("no_upload_remediated"):
                     try:
                         import tempfile
                         import zipfile
@@ -1118,13 +1119,6 @@ def run_process_command(args: Dict[str, Any]) -> int:
                             s3_bucket = os.environ.get("BDA_S3_BUCKET")
                             if s3_bucket:
                                 logger.debug(f"Using S3 bucket from environment variable: {s3_bucket}")
-                            else:
-                                logger.error("No S3 bucket specified and BDA_S3_BUCKET environment variable not set")
-                                if not args.get("quiet"):
-                                    print("\nWarning: Cannot upload remediated HTML to S3 - no bucket specified")
-                                    print("Either use --s3-bucket parameter or set BDA_S3_BUCKET environment variable")
-                                # Skip the upload but continue with the rest of the process
-                                s3_bucket = None
                         
                         if s3_bucket:
                             # Create a temporary zip file for the remediated content
@@ -1170,11 +1164,15 @@ def run_process_command(args: Dict[str, Any]) -> int:
                                 os.unlink(temp_zip_path)
                             except Exception as e:
                                 logger.warning(f"Failed to delete temporary zip file: {e}")
-                            
+                        else:
+                            logger.debug("No S3 bucket available for upload (not specified and no environment variable)")
+                    
                     except Exception as e:
                         logger.error(f"Error uploading remediated HTML to S3: {e}")
                         if not args.get("quiet"):
                             print(f"\nWarning: Failed to upload remediated HTML to S3: {e}")
+                else:
+                    logger.debug("Automatic upload to S3 disabled by --no-upload-remediated flag")
             
             # Add the audit report
             audit_output = os.path.join(output_dir, f"audit_report.{args.get('audit_format', 'json')}")
