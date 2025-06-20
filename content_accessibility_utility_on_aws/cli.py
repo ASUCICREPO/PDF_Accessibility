@@ -105,12 +105,6 @@ def _add_standardized_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--profile", help="AWS profile name to use for credentials")
     # Add S3 bucket parameter as a standardized parameter
     parser.add_argument("--s3-bucket", help="Name of an existing S3 bucket to use")
-    # Add option to disable automatic upload of remediated output to S3
-    parser.add_argument(
-        "--no-upload-remediated",
-        action="store_true",
-        help="Disable automatic upload of remediated HTML output to S3 bucket"
-    )
 
     # AWS/BDA options
     parser.add_argument(
@@ -1105,74 +1099,71 @@ def run_process_command(args: Dict[str, Any]) -> int:
             if remediated_path and os.path.exists(remediated_path):
                 output_files.append(remediated_path)
                 
-                # Always try to upload remediated HTML to S3 if a bucket is available
-                # (either from args or environment variable) unless explicitly disabled
-                if not args.get("no_upload_remediated"):
-                    try:
-                        import tempfile
-                        import zipfile
-                        from content_accessibility_utility_on_aws.batch.common import upload_to_s3
-                        
-                        # Get S3 bucket from args or environment variable
-                        s3_bucket = args.get("s3_bucket")
-                        if not s3_bucket:
-                            s3_bucket = os.environ.get("BDA_S3_BUCKET")
-                            if s3_bucket:
-                                logger.debug(f"Using S3 bucket from environment variable: {s3_bucket}")
-                        
-                        if s3_bucket:
-                            # Create a temporary zip file for the remediated content
-                            with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as temp_zip_file:
-                                temp_zip_path = temp_zip_file.name
-                            
-                            # Get the base name of the input file for the zip filename
-                            input_base_name = os.path.splitext(os.path.basename(args["input"]))[0]
-                            remediated_zip_filename = f"{input_base_name}_remediated.zip"
-                            
-                            # Create the zip file
-                            with zipfile.ZipFile(temp_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                                # Determine if remediated_path is a directory or file
-                                if os.path.isdir(remediated_path):
-                                    # Add all files in the directory to the zip
-                                    for root, _, files in os.walk(remediated_path):
-                                        for file in files:
-                                            file_path = os.path.join(root, file)
-                                            # Calculate relative path within the directory
-                                            rel_path = os.path.relpath(file_path, remediated_path)
-                                            zipf.write(file_path, rel_path)
-                                            logger.debug(f"Added to zip: {rel_path}")
-                                else:
-                                    # Add single file to the zip
-                                    zipf.write(remediated_path, os.path.basename(remediated_path))
-                                    logger.debug(f"Added to zip: {os.path.basename(remediated_path)}")
-                            
-                            # Upload the zip file to S3
-                            s3_key = f"remediated/{remediated_zip_filename}"
-                            
-                            upload_to_s3(
-                                local_path=temp_zip_path,
-                                bucket=s3_bucket,
-                                key=s3_key,
-                                metadata={"content-type": "application/zip"}
-                            )
-                            
-                            if not args.get("quiet"):
-                                print(f"\nUploaded remediated HTML as zip to s3://{s3_bucket}/{s3_key}")
-                            
-                            # Clean up the temporary zip file
-                            try:
-                                os.unlink(temp_zip_path)
-                            except Exception as e:
-                                logger.warning(f"Failed to delete temporary zip file: {e}")
-                        else:
-                            logger.debug("No S3 bucket available for upload (not specified and no environment variable)")
+                # Always upload remediated HTML to S3 if a bucket is available
+                # (either from args or environment variable)
+                try:
+                    import tempfile
+                    import zipfile
+                    from content_accessibility_utility_on_aws.batch.common import upload_to_s3
                     
-                    except Exception as e:
-                        logger.error(f"Error uploading remediated HTML to S3: {e}")
+                    # Get S3 bucket from args or environment variable
+                    s3_bucket = args.get("s3_bucket")
+                    if not s3_bucket:
+                        s3_bucket = os.environ.get("BDA_S3_BUCKET")
+                        if s3_bucket:
+                            logger.debug(f"Using S3 bucket from environment variable: {s3_bucket}")
+                    
+                    if s3_bucket:
+                        # Create a temporary zip file for the remediated content
+                        with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as temp_zip_file:
+                            temp_zip_path = temp_zip_file.name
+                        
+                        # Get the base name of the input file for the zip filename
+                        input_base_name = os.path.splitext(os.path.basename(args["input"]))[0]
+                        remediated_zip_filename = f"{input_base_name}_remediated.zip"
+                        
+                        # Create the zip file
+                        with zipfile.ZipFile(temp_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                            # Determine if remediated_path is a directory or file
+                            if os.path.isdir(remediated_path):
+                                # Add all files in the directory to the zip
+                                for root, _, files in os.walk(remediated_path):
+                                    for file in files:
+                                        file_path = os.path.join(root, file)
+                                        # Calculate relative path within the directory
+                                        rel_path = os.path.relpath(file_path, remediated_path)
+                                        zipf.write(file_path, rel_path)
+                                        logger.debug(f"Added to zip: {rel_path}")
+                            else:
+                                # Add single file to the zip
+                                zipf.write(remediated_path, os.path.basename(remediated_path))
+                                logger.debug(f"Added to zip: {os.path.basename(remediated_path)}")
+                        
+                        # Upload the zip file to S3
+                        s3_key = f"remediated/{remediated_zip_filename}"
+                        
+                        upload_to_s3(
+                            local_path=temp_zip_path,
+                            bucket=s3_bucket,
+                            key=s3_key,
+                            metadata={"content-type": "application/zip"}
+                        )
+                        
                         if not args.get("quiet"):
-                            print(f"\nWarning: Failed to upload remediated HTML to S3: {e}")
-                else:
-                    logger.debug("Automatic upload to S3 disabled by --no-upload-remediated flag")
+                            print(f"\nUploaded remediated HTML as zip to s3://{s3_bucket}/{s3_key}")
+                        
+                        # Clean up the temporary zip file
+                        try:
+                            os.unlink(temp_zip_path)
+                        except Exception as e:
+                            logger.warning(f"Failed to delete temporary zip file: {e}")
+                    else:
+                        logger.debug("No S3 bucket available for upload (not specified and no environment variable)")
+                
+                except Exception as e:
+                    logger.error(f"Error uploading remediated HTML to S3: {e}")
+                    if not args.get("quiet"):
+                        print(f"\nWarning: Failed to upload remediated HTML to S3: {e}")
             
             # Add the audit report
             audit_output = os.path.join(output_dir, f"audit_report.{args.get('audit_format', 'json')}")
