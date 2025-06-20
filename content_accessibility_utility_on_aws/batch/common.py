@@ -347,6 +347,67 @@ def generate_s3_key(original_key: str, stage: str, extension: str = None) -> str
     # Generate the new key
     return f"{stage}/{base_name}{extension}"
 
+def upload_directory_to_s3(local_dir: str, bucket: str, prefix: str) -> List[Dict[str, str]]:
+    """
+    Upload a directory and its contents to S3.
+
+    Args:
+        local_dir: Local directory to upload
+        bucket: S3 bucket name
+        prefix: S3 key prefix (folder path)
+
+    Returns:
+        List of dictionaries with bucket and key for each uploaded file
+    """
+    if not os.path.isdir(local_dir):
+        logger.error(f"Not a directory: {local_dir}")
+        return []
+
+    uploaded_files = []
+    
+    # Ensure prefix ends with a slash if it's not empty
+    if prefix and not prefix.endswith('/'):
+        prefix = f"{prefix}/"
+        
+    # Walk through the directory and upload all files
+    for root, _, files in os.walk(local_dir):
+        for file in files:
+            local_path = os.path.join(root, file)
+            
+            # Calculate the relative path from the local_dir
+            rel_path = os.path.relpath(local_path, local_dir)
+            
+            # Create the S3 key by combining the prefix and relative path
+            s3_key = f"{prefix}{rel_path}"
+            
+            # Determine content type based on file extension
+            content_type = None
+            if file.lower().endswith('.html'):
+                content_type = 'text/html'
+            elif file.lower().endswith('.css'):
+                content_type = 'text/css'
+            elif file.lower().endswith('.js'):
+                content_type = 'application/javascript'
+            elif file.lower().endswith('.png'):
+                content_type = 'image/png'
+            elif file.lower().endswith(('.jpg', '.jpeg')):
+                content_type = 'image/jpeg'
+            
+            # Prepare extra args for upload
+            extra_args = {}
+            if content_type:
+                extra_args['ContentType'] = content_type
+            
+            try:
+                # Upload the file
+                s3_client.upload_file(local_path, bucket, s3_key, ExtraArgs=extra_args)
+                uploaded_files.append({"bucket": bucket, "key": s3_key})
+                logger.debug(f"Uploaded {local_path} to s3://{bucket}/{s3_key}")
+            except Exception as e:
+                logger.error(f"Failed to upload {local_path} to S3: {e}")
+    
+    return uploaded_files
+
 
 def generate_job_id(bucket: str, key: str) -> str:
     """

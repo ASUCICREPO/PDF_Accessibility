@@ -103,6 +103,12 @@ def _add_standardized_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--profile", help="AWS profile name to use for credentials")
     # Add S3 bucket parameter as a standardized parameter
     parser.add_argument("--s3-bucket", help="Name of an existing S3 bucket to use")
+    # Add option to upload remediated output to S3
+    parser.add_argument(
+        "--upload-remediated",
+        action="store_true",
+        help="Upload remediated HTML output to S3 bucket under 'remediated' folder"
+    )
 
     # AWS/BDA options
     parser.add_argument(
@@ -1096,6 +1102,46 @@ def run_process_command(args: Dict[str, Any]) -> int:
             remediated_path = remediate_result.get("remediated_html_path", "")
             if remediated_path and os.path.exists(remediated_path):
                 output_files.append(remediated_path)
+                
+                # Upload remediated HTML to S3 if requested and S3 bucket is provided
+                if args.get("upload_remediated") and args.get("s3_bucket"):
+                    try:
+                        from content_accessibility_utility_on_aws.batch.common import upload_directory_to_s3
+                        
+                        s3_bucket = args.get("s3_bucket")
+                        
+                        # Determine if remediated_path is a directory or file
+                        if os.path.isdir(remediated_path):
+                            # Upload the entire directory
+                            uploaded_files = upload_directory_to_s3(
+                                local_dir=remediated_path,
+                                bucket=s3_bucket,
+                                prefix="remediated"
+                            )
+                            if not args.get("quiet"):
+                                print(f"\nUploaded remediated HTML to s3://{s3_bucket}/remediated/")
+                                print(f"Uploaded {len(uploaded_files)} files")
+                        else:
+                            # Upload single file
+                            from content_accessibility_utility_on_aws.batch.common import upload_to_s3
+                            
+                            # Generate S3 key for the remediated file
+                            s3_key = f"remediated/{os.path.basename(remediated_path)}"
+                            
+                            # Upload the file
+                            upload_to_s3(
+                                local_path=remediated_path,
+                                bucket=s3_bucket,
+                                key=s3_key,
+                                metadata={"content-type": "text/html"}
+                            )
+                            
+                            if not args.get("quiet"):
+                                print(f"\nUploaded remediated HTML to s3://{s3_bucket}/{s3_key}")
+                    except Exception as e:
+                        logger.error(f"Error uploading remediated HTML to S3: {e}")
+                        if not args.get("quiet"):
+                            print(f"\nWarning: Failed to upload remediated HTML to S3: {e}")
             
             # Add the audit report
             audit_output = os.path.join(output_dir, f"audit_report.{args.get('audit_format', 'json')}")
