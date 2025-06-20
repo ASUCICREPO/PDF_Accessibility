@@ -302,8 +302,8 @@ class ExtendedBDAClient(BDAClient):
             if not self.s3_bucket:
                 raise ValueError("S3 bucket not configured")
 
-            # Upload PDF to S3
-            s3_key = f"uploads/{uuid.uuid4().hex}/{os.path.basename(pdf_path)}"
+            # Upload PDF to S3 - simplified path structure
+            s3_key = f"uploads/{os.path.basename(pdf_path)}"
             s3_path = f"s3://{self.s3_bucket}/{s3_key}"
 
             logger.debug(f"Uploading {pdf_path} to {s3_path}")
