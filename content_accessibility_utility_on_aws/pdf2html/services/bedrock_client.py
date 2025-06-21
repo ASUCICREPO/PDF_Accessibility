@@ -316,21 +316,37 @@ class ExtendedBDAClient(BDAClient):
             profile_arn = self.get_profile()
             logger.debug(f"Using profile ARN: {profile_arn}")
             logger.debug(f"Using project ARN: {self.project_arn}")
-            # Submit the job with project ARN
-            response = self.bda_runtime_client.invoke_data_automation_async(
-                inputConfiguration={"s3Uri": s3_path},
-                outputConfiguration={
-                    "s3Uri": f"s3://{self.s3_bucket}/output/{uuid.uuid4().hex}/"
-                },
-                dataAutomationConfiguration={
-                    "dataAutomationProjectArn": self.project_arn,
-                    "stage": "LIVE",
-                },
-                dataAutomationProfileArn=profile_arn,
-            )
-
-            # Get the invocation ARN and output path
-            invocation_arn = response["invocationArn"]
+            
+            # 1) Invoke the job, but handle exceptions properly
+            try:
+                # Debug: List all available methods in the client
+                available_methods = [method for method in dir(self.bda_runtime_client) if not method.startswith('_')]
+                logger.debug(f"Available methods in bda_runtime_client: {available_methods}")
+                
+                # Based on AWS CLI and boto3 documentation, the correct method is invoke_data_automation_async
+                # with specific parameters
+                default_output_path = f"s3://{self.s3_bucket}/output/{uuid.uuid4().hex}/"
+                
+                # Use the correct method name and parameters
+                response = self.bda_runtime_client.invoke_data_automation_async(
+                    inputConfiguration={"s3Uri": s3_path},
+                    outputConfiguration={"s3Uri": default_output_path},
+                    dataAutomationConfiguration={
+                        "dataAutomationProjectArn": self.project_arn,
+                        "stage": "LIVE",
+                    },
+                    dataAutomationProfileArn=profile_arn,
+                )
+                
+                logger.debug(f"invoke_data_automation_async response: {response}")
+                
+            except Exception as e:
+                # Check if this is an access denied error by looking at the error message
+                if "AccessDenied" in str(e):
+                    logger.error(f"Bedrock permission denied: {e}")
+                else:
+                    logger.error(f"Unexpected Bedrock invoke error: {e}")
+                raise
 
             # Handle the case when 'output' key is missing or has a different structure
             if "output" in response and "outputPath" in response["output"]:
@@ -339,63 +355,124 @@ class ExtendedBDAClient(BDAClient):
             else:
                 # Log the actual response structure for debugging
                 logger.debug(f"Response structure: {response}")
-                # Use a default output path based on the invocation ARN
+                # Use a default output path based on a UUID
                 output_path = f"s3://{self.s3_bucket}/output/{uuid.uuid4().hex}/"
                 logger.debug(
                     f"Output key 'output' not found in response, using default path: {output_path}"
                 )
 
-            # Monitor the job
-            logger.debug(f"Monitoring job {invocation_arn}")
-            while True:
+            # 1) Determine which ID the service returned and how we'll poll it
+            if "automationExecutionId" in response:
+                # this client returns execution IDs
+                execution_id = response["automationExecutionId"]
+                poll_args = {"executionId": execution_id}
+                invocation_arn = f"execution-{execution_id}"  # For logging
+            elif "invocationArn" in response:
+                # this client returns ARNs
+                invocation_arn = response["invocationArn"]
+                poll_args = {"invocationArn": invocation_arn}
+            else:
+                raise RuntimeError(f"No job identifier in BDA response: {response!r}")
+
+            # 2) Poll until the job finishes
+            start = time.time()
+            
+            # Debug: List all available methods in the client
+            available_methods = [method for method in dir(self.bda_runtime_client) if not method.startswith('_')]
+            logger.debug(f"Available methods in bda_runtime_client: {available_methods}")
+            
+            # Based on AWS CLI and boto3 documentation, the correct method is get_data_automation_status
+            # and it takes invocationArn as a parameter
+            if "invocationArn" in poll_args:
                 try:
-                    # Try the new method name first (get_data_automation_status)
-                    response = self.bda_runtime_client.get_data_automation_status(
-                        invocationArn=invocation_arn
-                    )
-                except AttributeError:
-                    try:
-                        # Fall back to the old method name if needed
-                        response = (
-                            self.bda_runtime_client.get_data_automation_invocation(
+                    # Use the correct method name from the boto3 client
+                    invocation_arn = poll_args["invocationArn"]
+                    
+                    while True:
+                        elapsed = time.time() - start
+                        if elapsed > 300:  # 5 minutes
+                            raise TimeoutError(f"BDA job timed out after {elapsed:.0f}s")
+                        
+                        try:
+                            # Use the correct method name and parameter
+                            result = self.bda_runtime_client.get_data_automation_status(
                                 invocationArn=invocation_arn
                             )
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to get job status: {e}")
-                        raise
-
-                status = response["status"]
-                logger.debug(f"Job {invocation_arn} status: {status}")
-
-                if status in ["Success", "Failed", "Cancelled"]:
-                    break
-
-                # nosemgrep: arbitrary-sleep
-                time.sleep(10)
+                            
+                            # Get status from the result
+                            status = result.get("status", "Unknown")
+                            logger.debug(f"Got status: {status}, result: {result}")
+                            
+                            # Check if the job is complete
+                            if status in ("Succeeded", "Success", "Failed", "Failure", "COMPLETED", "FAILED"):
+                                break
+                        except Exception as e:
+                            logger.warning(f"Error polling job status: {e}. Retrying...")
+                        
+                        time.sleep(5)
+                except Exception as e:
+                    logger.error(f"Error during job status polling: {e}")
+                    # Continue with processing even if polling fails
+                    result = {"status": "Unknown"}
+                    status = "Unknown"
+            else:
+                # If we don't have an invocationArn, we can't poll for status
+                logger.warning("No invocationArn found in response. Skipping job status polling.")
+                result = {"status": "Unknown"}
+                status = "Unknown"
 
             # Get the output path from the job status
-            if status == "Success":
+            logger.debug(f"Job {invocation_arn} finished with status: {status}")
+            
+            # Handle different status values
+            success_statuses = ("Succeeded", "Success", "COMPLETED", "SUCCEEDED", "Complete", "Completed")
+            if status in success_statuses:
                 # Get the output path from the job status response
-                if (
-                    "outputConfiguration" in response
-                    and "s3Uri" in response["outputConfiguration"]
-                ):
-                    output_path = response["outputConfiguration"]["s3Uri"]
-                    # Extract the base directory from the path (remove the job_metadata.json part)
-                    if output_path.endswith("job_metadata.json"):
-                        output_path = "/".join(output_path.split("/")[:-1]) + "/"
+                # Try different response formats
+                output_path_found = False
+                
+                # Debug the result structure
+                logger.debug(f"Result structure: {result}")
+                
+                # Check all possible paths for output configuration
+                possible_output_paths = [
+                    # Check result["outputConfiguration"]["s3Uri"]
+                    lambda r: r.get("outputConfiguration", {}).get("s3Uri"),
+                    # Check result["output"]["outputPath"]
+                    lambda r: r.get("output", {}).get("outputPath"),
+                    # Check result["outputPath"]
+                    lambda r: r.get("outputPath"),
+                    # Check response["outputConfiguration"]["s3Uri"]
+                    lambda r: response.get("outputConfiguration", {}).get("s3Uri"),
+                    # Check response["output"]["outputPath"]
+                    lambda r: response.get("output", {}).get("outputPath"),
+                    # Check result["s3OutputPath"]
+                    lambda r: r.get("s3OutputPath"),
+                ]
+                
+                for path_getter in possible_output_paths:
+                    try:
+                        path = path_getter(result)
+                        if path:
+                            output_path = path
+                            output_path_found = True
+                            logger.debug(f"Found output path: {output_path}")
+                            break
+                    except Exception as e:
+                        logger.debug(f"Error getting output path: {e}")
+                
+                # Extract the base directory from the path (remove the job_metadata.json part)
+                if output_path_found and output_path.endswith("job_metadata.json"):
+                    output_path = "/".join(output_path.split("/")[:-1]) + "/"
                     logger.debug(f"Results will be available at: {output_path}")
-                else:
+                elif not output_path_found:
                     logger.warning(
-                        f"Output path not found in job status response: {response}"
+                        f"Output path not found in job status response: {result}"
                     )
                     # Use the default output path we created earlier
                     logger.debug(f"Using default output path: {output_path}")
 
-            logger.debug(f"Job {invocation_arn} finished with status: {status}")
-
-            if status != "Success":
+            if status not in success_statuses:
                 raise RuntimeError(f"Job failed with status: {status}")
 
             # Download results
@@ -403,78 +480,132 @@ class ExtendedBDAClient(BDAClient):
             logger.debug(f"Saving to {output_dir}")
 
             # Parse the S3 path
-            bucket = output_path.split("/")[2]
-            prefix = "/".join(output_path.split("/")[3:])
+            try:
+                bucket = output_path.split("/")[2]
+                prefix = "/".join(output_path.split("/")[3:])
+            except (IndexError, ValueError) as e:
+                logger.error(f"Invalid S3 path format: {output_path}, error: {e}")
+                raise ValueError(f"Invalid S3 path format: {output_path}") from e
 
-            # List objects in the output directory
+            # List objects in the output directory with timeout handling
             paginator = self.s3_client.get_paginator("list_objects_v2")
             downloaded_files = []
-
-            # Parse the S3 path
-            bucket = output_path.split("/")[2]
-            prefix = "/".join(output_path.split("/")[3:])
+            
+            # Set a timeout for S3 operations
+            s3_start_time = time.time()
+            s3_timeout = 60  # 60 seconds timeout for S3 operations
 
             # Check if we need to look for the result.json in a subdirectory
             result_json_found = False
+            
+            # Add retry logic for S3 operations
+            max_retries = 3
+            retry_delay = 1  # Start with 1 second delay
+            
+            for retry in range(max_retries):
+                try:
+                    # Check if we've exceeded the S3 timeout
+                    if time.time() - s3_start_time > s3_timeout:
+                        logger.warning(f"S3 operation timed out after {s3_timeout} seconds")
+                        break
+                        
+                    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+                        for obj in page.get("Contents", []):
+                            # Get the key
+                            key = obj["Key"]
 
-            for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-                for obj in page.get("Contents", []):
-                    # Get the key
-                    key = obj["Key"]
+                            # Check if this is a result.json file
+                            if key.endswith("result.json"):
+                                result_json_found = True
+                                logger.debug(f"Found result.json at: {key}")
 
-                    # Check if this is a result.json file
-                    if key.endswith("result.json"):
-                        result_json_found = True
-                        logger.debug(f"Found result.json at: {key}")
+                                # Get the relative path
+                                rel_path = os.path.relpath(key, prefix)
 
-                        # Get the relative path
-                        rel_path = os.path.relpath(key, prefix)
+                                # Create the local directory structure
+                                local_path = os.path.join(output_dir, rel_path)
+                                os.makedirs(os.path.dirname(local_path), exist_ok=True)
 
-                        # Create the local directory structure
-                        local_path = os.path.join(output_dir, rel_path)
-                        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                                # Download the file with retry logic
+                                download_success = False
+                                for download_retry in range(max_retries):
+                                    try:
+                                        logger.debug(f"Downloading {key} to {local_path}")
+                                        self.s3_client.download_file(bucket, key, local_path)
+                                        downloaded_files.append(local_path)
+                                        download_success = True
+                                        break
+                                    except Exception as e:
+                                        logger.warning(f"Download retry {download_retry+1}/{max_retries} failed: {e}")
+                                        time.sleep(retry_delay * (2 ** download_retry))  # Exponential backoff
+                                
+                                if not download_success:
+                                    logger.error(f"Failed to download {key} after {max_retries} retries")
+                                    continue
 
-                        # Download the file
-                        logger.debug(f"Downloading {key} to {local_path}")
-                        self.s3_client.download_file(bucket, key, local_path)
-                        downloaded_files.append(local_path)
+                                # If we found a result.json, we need to check for other files in the same directory
+                                result_dir = os.path.dirname(key)
 
-                        # If we found a result.json, we need to check for other files in the same directory
-                        result_dir = os.path.dirname(key)
+                                # List all objects in the result directory with retry logic
+                                for result_retry in range(max_retries):
+                                    try:
+                                        # Check if we've exceeded the S3 timeout
+                                        if time.time() - s3_start_time > s3_timeout:
+                                            logger.warning(f"S3 operation timed out after {s3_timeout} seconds")
+                                            break
+                                            
+                                        for result_page in paginator.paginate(
+                                            Bucket=bucket, Prefix=result_dir
+                                        ):
+                                            for result_obj in result_page.get("Contents", []):
+                                                result_key = result_obj["Key"]
+                                                if (
+                                                    result_key != key
+                                                ):  # Skip the result.json file we already downloaded
+                                                    # Get the relative path
+                                                    result_rel_path = os.path.relpath(
+                                                        result_key, prefix
+                                                    )
 
-                        # List all objects in the result directory
-                        for result_page in paginator.paginate(
-                            Bucket=bucket, Prefix=result_dir
-                        ):
-                            for result_obj in result_page.get("Contents", []):
-                                result_key = result_obj["Key"]
-                                if (
-                                    result_key != key
-                                ):  # Skip the result.json file we already downloaded
-                                    # Get the relative path
-                                    result_rel_path = os.path.relpath(
-                                        result_key, prefix
-                                    )
+                                                    # Create the local directory structure
+                                                    result_local_path = os.path.join(
+                                                        output_dir, result_rel_path
+                                                    )
+                                                    os.makedirs(
+                                                        os.path.dirname(result_local_path),
+                                                        exist_ok=True,
+                                                    )
 
-                                    # Create the local directory structure
-                                    result_local_path = os.path.join(
-                                        output_dir, result_rel_path
-                                    )
-                                    os.makedirs(
-                                        os.path.dirname(result_local_path),
-                                        exist_ok=True,
-                                    )
-
-                                    # Download the file
-                                    logger.debug(
-                                        f"Downloading {result_key} to {result_local_path}"
-                                    )
-                                    self.s3_client.download_file(
-                                        bucket, result_key, result_local_path
-                                    )
-                                    downloaded_files.append(result_local_path)
-
+                                                    # Download the file with retry logic
+                                                    result_download_success = False
+                                                    for result_download_retry in range(max_retries):
+                                                        try:
+                                                            logger.debug(
+                                                                f"Downloading {result_key} to {result_local_path}"
+                                                            )
+                                                            self.s3_client.download_file(
+                                                                bucket, result_key, result_local_path
+                                                            )
+                                                            downloaded_files.append(result_local_path)
+                                                            result_download_success = True
+                                                            break
+                                                        except Exception as e:
+                                                            logger.warning(f"Download retry {result_download_retry+1}/{max_retries} failed: {e}")
+                                                            time.sleep(retry_delay * (2 ** result_download_retry))  # Exponential backoff
+                                                    
+                                                    if not result_download_success:
+                                                        logger.error(f"Failed to download {result_key} after {max_retries} retries")
+                                        break  # Successfully processed the result directory
+                                    except Exception as e:
+                                        logger.warning(f"Result directory processing retry {result_retry+1}/{max_retries} failed: {e}")
+                                        time.sleep(retry_delay * (2 ** result_retry))  # Exponential backoff
+                    break  # Successfully processed all pages
+                except Exception as e:
+                    logger.warning(f"S3 pagination retry {retry+1}/{max_retries} failed: {e}")
+                    time.sleep(retry_delay * (2 ** retry))  # Exponential backoff
+            
             if not result_json_found:
+                logger.warning(f"No result.json found in {output_path}")
                 raise FileNotFoundError("result.json not found in BDA output")
 
             # Find the result.json file
