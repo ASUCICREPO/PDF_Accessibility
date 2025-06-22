@@ -53,7 +53,7 @@ def lambda_handler(event, context):
         filename_base = os.path.splitext(original_filename)[0]
         
         # IDEMPOTENCY CHECK: Check if output already exists
-        output_check_key = f"output/{filename_base}/{filename_base}.zip"
+        output_check_key = f"output/{filename_base}.zip"
         try:
             # Try to head the object - if it exists, we've already processed this file
             s3.head_object(Bucket=bucket, Key=output_check_key)
@@ -120,7 +120,7 @@ def lambda_handler(event, context):
             
             # Upload zip to the output folder so head_object can detect it
             # This MUST match the path we check in the idempotency check above
-            output_s3_key = f"output/{filename_base}/{filename_base}.zip"
+            output_s3_key = f"output/{filename_base}.zip"
             s3.upload_file(zip_path, bucket, output_s3_key)
             print(f"[INFO] Uploaded zip file to s3://{bucket}/{output_s3_key}")
             
@@ -130,7 +130,6 @@ def lambda_handler(event, context):
             print(f"[INFO] Uploaded zip file to s3://{bucket}/{remediated_s3_key}")
             
             # Upload only the index.html file for compatibility with existing code
-            # First check if it exists directly in the temp directory
             index_html_path = os.path.join(temp_output_dir, "index.html")
             if not os.path.exists(index_html_path):
                 # If not found directly, look for it in subdirectories
@@ -143,11 +142,36 @@ def lambda_handler(event, context):
                         break
             
             if os.path.exists(index_html_path):
-                index_s3_key = f"output/{filename_base}/index.html"
+                index_s3_key = f"output/{filename_base}.html"
                 s3.upload_file(index_html_path, bucket, index_s3_key)
                 print(f"[INFO] Uploaded index.html to s3://{bucket}/{index_s3_key}")
             else:
                 print(f"[WARNING] No index.html found in output directory")
+                
+            # 5) Clean up Bedrock intermediate files
+            try:
+                # Delete the entire Bedrock output folder to prevent accumulation
+                bedrock_prefix = f"output/{filename_base}/"
+                print(f"[INFO] Cleaning up Bedrock intermediate files at s3://{bucket}/{bedrock_prefix}")
+                
+                # List all objects in the prefix
+                objects_to_delete = []
+                paginator = s3.get_paginator('list_objects_v2')
+                for page in paginator.paginate(Bucket=bucket, Prefix=bedrock_prefix):
+                    if 'Contents' in page:
+                        for obj in page['Contents']:
+                            objects_to_delete.append({'Key': obj['Key']})
+                
+                # Delete in batches of 1000 (S3 limit)
+                for i in range(0, len(objects_to_delete), 1000):
+                    response = s3.delete_objects(
+                        Bucket=bucket,
+                        Delete={'Objects': objects_to_delete[i:i+1000]}
+                    )
+                    print(f"[INFO] Deleted {len(response.get('Deleted', []))} files from {bedrock_prefix}")
+                    
+            except Exception as cleanup_error:
+                print(f"[WARNING] Failed to clean up Bedrock intermediate files: {cleanup_error}")
                 
         except Exception as e:
             print(f"[ERROR] Creating or uploading zip failed: {e}")
@@ -158,9 +182,9 @@ def lambda_handler(event, context):
             "status": "done",
             "execution_id": context.aws_request_id,
             "input": f"s3://{bucket}/{key}",
-            "output_dir": f"s3://{bucket}/output/{filename_base}/",
-            "output_zip": f"s3://{bucket}/output/{filename_base}/{filename_base}.zip",
-            "remediated_zip": f"s3://{bucket}/remediated/{filename_base}/{filename_base}.zip"
+            "output_dir": f"s3://{bucket}/output/",
+            "output_zip": f"s3://{bucket}/output/{filename_base}.zip",
+            "remediated_zip": f"s3://{bucket}/remediated/{filename_base}.zip"
         }
     except Exception as e:
         print(f"[ERROR] Unhandled exception: {e}")

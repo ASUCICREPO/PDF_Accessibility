@@ -487,8 +487,11 @@ class ExtendedBDAClient(BDAClient):
 
             # Parse the S3 path
             try:
-                bucket = output_path.split("/")[2]
-                prefix = "/".join(output_path.split("/")[3:])
+                s3_parts = output_path.replace("s3://", "").split("/")
+                bucket = s3_parts[0]
+                prefix = "/".join(s3_parts[1:])
+                if not prefix.endswith("/"):
+                    prefix += "/"
             except (IndexError, ValueError) as e:
                 logger.error(f"Invalid S3 path format: {output_path}, error: {e}")
                 raise ValueError(f"Invalid S3 path format: {output_path}") from e
