@@ -166,16 +166,20 @@ class BDAClient:
             standard_output_config = {
                 "document": {
                     "extraction": {
-                        "granularity": {"types": ["DOCUMENT", "PAGE", "ELEMENT"]},
+                        "granularity": {"types": ["DOCUMENT"]},
                         "boundingBox": {"state": "ENABLED"},
                     },
-                    "generativeField": {"state": "ENABLED"},
+                    # disable any generative summary output
+                    "generativeField": {"state": "DISABLED"},
                     "outputFormat": {
+                        # only HTML
                         "textFormat": {"types": ["HTML"]},
-                        "additionalFileFormat": {"state": "ENABLED"},
+                        # disable additional JSON or side-car files
+                        "additionalFileFormat": {"state": "DISABLED"},
                     },
                 }
             }
+
 
             # Create the project using boto3
             bda_admin_client = self.session.client("bedrock-data-automation")
@@ -325,7 +329,9 @@ class ExtendedBDAClient(BDAClient):
                 
                 # Based on AWS CLI and boto3 documentation, the correct method is invoke_data_automation_async
                 # with specific parameters
-                default_output_path = f"s3://{self.s3_bucket}/output/{uuid.uuid4().hex}/"
+                # Use a deterministic output path based on the PDF filename instead of random UUID
+                pdf_base = os.path.splitext(os.path.basename(pdf_path))[0]
+                default_output_path = f"s3://{self.s3_bucket}/output/{pdf_base}/"
                 
                 # Use the correct method name and parameters
                 response = self.bda_runtime_client.invoke_data_automation_async(
@@ -355,8 +361,8 @@ class ExtendedBDAClient(BDAClient):
             else:
                 # Log the actual response structure for debugging
                 logger.debug(f"Response structure: {response}")
-                # Use a default output path based on a UUID
-                output_path = f"s3://{self.s3_bucket}/output/{uuid.uuid4().hex}/"
+                # Fall back to the same prefix we used for invoke_data_automation_async
+                output_path = default_output_path
                 logger.debug(
                     f"Output key 'output' not found in response, using default path: {output_path}"
                 )
