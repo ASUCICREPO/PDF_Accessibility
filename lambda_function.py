@@ -84,7 +84,7 @@ def lambda_handler(event, context):
                         print(f"[INFO] Added to zip: {rel_path}")
             
             # Upload the zip file to S3
-            s3_key = f"output/{filename_base}/{filename_base}.zip"
+            s3_key = f"remediated/{filename_base}/{filename_base}.zip"
             s3.upload_file(zip_path, bucket, s3_key)
             print(f"[INFO] Uploaded zip file to s3://{bucket}/{s3_key}")
             
