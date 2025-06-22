@@ -118,13 +118,13 @@ def lambda_handler(event, context):
                         zipf.write(file_path, rel_path)
                         print(f"[INFO] Added to zip: {rel_path}")
             
-            # Upload ONLY the zip file to S3 (not individual files)
-            output_s3_key = f"output/{filename_base}/{filename_base}.zip"
-            s3.upload_file(zip_path, bucket, output_s3_key)
-            print(f"[INFO] Uploaded zip file to s3://{bucket}/{output_s3_key}")
+            # Upload the zip file directly to output/ and remediated/ folders (no nested folders)
+            # output_s3_key = f"output/{filename_base}.zip"
+            # s3.upload_file(zip_path, bucket, output_s3_key)
+            # print(f"[INFO] Uploaded zip file to s3://{bucket}/{output_s3_key}")
             
-            # Also upload a copy to the remediated folder for consistency
-            remediated_s3_key = f"remediated/{filename_base}/{filename_base}.zip"
+             # Also upload a copy to the remediated folder
+            remediated_s3_key = f"remediated/{filename_base}.zip"
             s3.upload_file(zip_path, bucket, remediated_s3_key)
             print(f"[INFO] Uploaded zip file to s3://{bucket}/{remediated_s3_key}")
             
