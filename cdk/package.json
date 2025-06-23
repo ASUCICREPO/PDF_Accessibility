@@ -1,0 +1,19 @@
+{
+  "name": "pdf2html-cdk",
+  "version": "1.0.0",
+  "description": "CDK deployment for PDF2HTML Accessibility Utility on AWS",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo \"No build step required\"",
+    "cdk": "cdk",
+    "deploy": "cdk deploy",
+    "synth": "cdk synth"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "aws-cdk-lib": "^2.0.0",
+    "constructs": "^10.0.0"
+  }
+}
