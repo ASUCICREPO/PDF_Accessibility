@@ -105,30 +105,6 @@ def lambda_handler(event, context):
 
         # 4) Create a zip file with all output files (like the CLI does)
         try:
-            # Create a zip file in /tmp
-            zip_path = f"/tmp/{filename_base}.zip"
-            
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                # Walk through the output directory and add files to zip
-                for root, dirs, files in os.walk(temp_output_dir):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        # Calculate relative path to maintain directory structure
-                        rel_path = os.path.relpath(file_path, temp_output_dir)
-                        zipf.write(file_path, rel_path)
-                        print(f"[INFO] Added to zip: {rel_path}")
-            
-            # Upload zip to the output folder so head_object can detect it
-            # This MUST match the path we check in the idempotency check above
-            output_s3_key = f"output/{filename_base}.zip"
-            s3.upload_file(zip_path, bucket, output_s3_key)
-            print(f"[INFO] Uploaded zip file to s3://{bucket}/{output_s3_key}")
-            
-            # Also upload a copy to the remediated folder for consistency
-            remediated_s3_key = f"remediated/{filename_base}.zip"
-            s3.upload_file(zip_path, bucket, remediated_s3_key)
-            print(f"[INFO] Uploaded zip file to s3://{bucket}/{remediated_s3_key}")
-            
             # Upload only the index.html file for compatibility with existing code
             index_html_path = os.path.join(temp_output_dir, "index.html")
             if not os.path.exists(index_html_path):
@@ -148,7 +124,8 @@ def lambda_handler(event, context):
             else:
                 print(f"[WARNING] No index.html found in output directory")
                 
-            # 5) Clean up Bedrock intermediate files
+            # 5) Clean up Bedrock intermediate files - COMMENTED OUT TO PRESERVE OUTPUT FILES
+            """
             try:
                 # Delete the entire Bedrock output folder to prevent accumulation
                 bedrock_prefix = f"output/{filename_base}/"
@@ -172,6 +149,62 @@ def lambda_handler(event, context):
                     
             except Exception as cleanup_error:
                 print(f"[WARNING] Failed to clean up Bedrock intermediate files: {cleanup_error}")
+            """
+            print(f"[INFO] Skipping cleanup of Bedrock intermediate files to preserve output files")
+            
+            # MOVED: Create the zip file at the end after all processing is complete
+            # This ensures all files are included in the zip
+            zip_path = f"/tmp/{filename_base}.zip"
+            
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # Walk through the output directory and add files to zip
+                for root, dirs, files in os.walk(temp_output_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        # Calculate relative path to maintain directory structure
+                        rel_path = os.path.relpath(file_path, temp_output_dir)
+                        zipf.write(file_path, rel_path)
+                        print(f"[INFO] Added to zip: {rel_path}")
+            
+            # Upload zip to the output folder so head_object can detect it
+            # This MUST match the path we check in the idempotency check above
+            output_s3_key = f"output/{filename_base}.zip"
+            s3.upload_file(zip_path, bucket, output_s3_key)
+            print(f"[INFO] Uploaded complete zip file to s3://{bucket}/{output_s3_key}")
+            
+            # Create a separate "final" zip for the remediated folder with only specific files
+            final_zip_path = f"/tmp/final_{filename_base}.zip"
+            
+            # List of files/folders to include in the final zip
+            include_patterns = [
+                "remediated_html/",
+                "usage_data.json",
+                "remediation_report.html"
+            ]
+            
+            with zipfile.ZipFile(final_zip_path, 'w', zipfile.ZIP_DEFLATED) as final_zipf:
+                # Walk through the output directory and add only specific files to zip
+                for root, dirs, files in os.walk(temp_output_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        # Calculate relative path to maintain directory structure
+                        rel_path = os.path.relpath(file_path, temp_output_dir)
+                        
+                        # Check if this file should be included
+                        should_include = False
+                        for pattern in include_patterns:
+                            if pattern.lower() in rel_path.lower():
+                                should_include = True
+                                break
+                        
+                        if should_include:
+                            final_zipf.write(file_path, rel_path)
+                            print(f"[INFO] Added to final zip: {rel_path}")
+            
+            # Upload the final zip to the remediated folder
+            remediated_s3_key = f"remediated/final_{filename_base}.zip"
+            s3.upload_file(final_zip_path, bucket, remediated_s3_key)
+            print(f"[INFO] Uploaded final zip file to s3://{bucket}/{remediated_s3_key}")
                 
         except Exception as e:
             print(f"[ERROR] Creating or uploading zip failed: {e}")
@@ -184,7 +217,7 @@ def lambda_handler(event, context):
             "input": f"s3://{bucket}/{key}",
             "output_dir": f"s3://{bucket}/output/",
             "output_zip": f"s3://{bucket}/output/{filename_base}.zip",
-            "remediated_zip": f"s3://{bucket}/remediated/{filename_base}.zip"
+            "remediated_zip": f"s3://{bucket}/remediated/final_{filename_base}.zip"
         }
     except Exception as e:
         print(f"[ERROR] Unhandled exception: {e}")

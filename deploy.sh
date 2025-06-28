@@ -115,7 +115,7 @@ fi
 
 # Build and push Docker image
 echo "Building and pushing Docker image to $REPO_URI..."
-docker buildx build --platform linux/amd64 --load -t $REPO_URI:latest .
+docker buildx build --platform linux/amd64 --no-cache --load -t $REPO_URI:latest .
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $REPO_URI
 docker push $REPO_URI:latest
 echo "Docker image pushed successfully."
