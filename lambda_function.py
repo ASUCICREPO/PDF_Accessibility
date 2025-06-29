@@ -95,7 +95,11 @@ def lambda_handler(event, context):
                 pdf_path=local_in, 
                 output_dir=temp_output_dir,
                 perform_audit=True,
-                perform_remediation=True
+                perform_remediation=True,
+                conversion_options={
+                    "cleanup_bda_output": True,
+                    "single_file": True
+                }
             )
             print(f"[INFO] Processing complete. Result: {conversion_result}")
         except Exception as e:
