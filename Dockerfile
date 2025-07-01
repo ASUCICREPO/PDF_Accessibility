@@ -7,7 +7,7 @@ WORKDIR /var/task
 
 # 3. Install AWS CLI for debugging purposes
 RUN yum -y update && \
-    yum -y install unzip && \
+    yum -y install unzip gcc zlib-devel libjpeg-devel && \
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
     unzip awscliv2.zip && \
     ./aws/install && \
