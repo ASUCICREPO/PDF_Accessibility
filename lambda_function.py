@@ -5,9 +5,41 @@ import traceback
 import zipfile
 import tempfile
 import shutil
+import urllib.parse
 from content_accessibility_utility_on_aws.api import process_pdf_accessibility
 
 s3 = boto3.client("s3")
+
+def sanitize_filename(filename):
+    """
+    Sanitize filename by replacing spaces with underscores and handling other problematic characters.
+    
+    Args:
+        filename: Original filename
+        
+    Returns:
+        Sanitized filename
+    """
+    # Replace spaces with underscores
+    sanitized = filename.replace(' ', '_')
+    
+    # Handle other potentially problematic characters
+    # Replace multiple consecutive underscores with a single one
+    while '__' in sanitized:
+        sanitized = sanitized.replace('__', '_')
+    
+    # Replace other problematic characters
+    for char in ['#', '%', '&', '{', '}', '\\', '<', '>', '*', '?', '/', '$', '!', '\'', '"', ':', '@', '+', '`', '|', '=']:
+        sanitized = sanitized.replace(char, '_')
+    
+    # Remove leading/trailing underscores
+    sanitized = sanitized.strip('_')
+    
+    # Ensure we still have a valid filename
+    if not sanitized:
+        sanitized = "document"
+    
+    return sanitized
 
 def lambda_handler(event, context):
     """
@@ -31,10 +63,17 @@ def lambda_handler(event, context):
         if not event.get("Records") or len(event["Records"]) == 0:
             print(f"[WARNING] No records found in event: {event}")
             return {"status": "error", "message": "No records found in event"}
+        
+        # Debug: Print all records to see what's happening
+        for i, record in enumerate(event["Records"]):
+            print(f"[DEBUG] Record {i}: {json.dumps(record)}")
             
         record = event["Records"][0]["s3"]
         bucket = record["bucket"]["name"]
         key = record["object"]["key"]
+        
+        # URL decode the key to handle URL-encoded characters (like spaces)
+        key = urllib.parse.unquote_plus(key)
         
         print(f"[INFO] Processing s3://{bucket}/{key}")
         
@@ -48,32 +87,51 @@ def lambda_handler(event, context):
             print(f"[INFO] Skipping non-PDF file: {key}")
             return {"status": "skipped", "message": "Not a PDF file"}
             
+            
         # Extract filename for output paths
         original_filename = os.path.basename(key)
-        filename_base = os.path.splitext(original_filename)[0]
+        
+        # Sanitize the filename by replacing spaces with underscores
+        sanitized_filename = sanitize_filename(original_filename)
+        print(f"[INFO] Original filename: {original_filename}, Sanitized filename: {sanitized_filename}")
+        
+        # Use sanitized filename for all processing
+        filename_base = os.path.splitext(sanitized_filename)[0]
         
         # IDEMPOTENCY CHECK: Check if output already exists
-        output_check_key = f"output/{filename_base}.zip"
-        try:
-            # Try to head the object - if it exists, we've already processed this file
-            s3.head_object(Bucket=bucket, Key=output_check_key)
-            print(f"[INFO] Output already exists for {key}, skipping processing")
+        # Try both sanitized and original filenames for backward compatibility
+        output_check_keys = [
+            f"output/{filename_base}.zip",  # Sanitized filename
+            f"output/{os.path.splitext(original_filename)[0]}.zip"  # Original filename
+        ]
+        
+        output_exists = False
+        for output_check_key in output_check_keys:
+            try:
+                # Try to head the object - if it exists, we've already processed this file
+                s3.head_object(Bucket=bucket, Key=output_check_key)
+                print(f"[INFO] Output already exists at s3://{bucket}/{output_check_key}, skipping processing")
+                output_exists = True
+                break
+            except s3.exceptions.ClientError as e:
+                # If we get a 404, the file doesn't exist and we should continue checking
+                if e.response['Error']['Code'] != '404':
+                    # If it's not a 404, something else went wrong
+                    raise e
+        
+        if output_exists:
             return {
                 "status": "skipped", 
                 "message": "Output already exists",
                 "input": f"s3://{bucket}/{key}",
                 "output_dir": f"s3://{bucket}/output/{filename_base}/"
             }
-        except s3.exceptions.ClientError as e:
-            # If we get a 404, the file doesn't exist and we should process it
-            if e.response['Error']['Code'] != '404':
-                # If it's not a 404, something else went wrong
-                raise e
-            # Otherwise continue with processing
-            print(f"[INFO] No existing output found, proceeding with processing")
+            
+        # Otherwise continue with processing
+        print(f"[INFO] No existing output found, proceeding with processing")
 
-        # 2) Download PDF to /tmp with original filename
-        local_in = f"/tmp/{original_filename}"
+        # 2) Download PDF to /tmp with sanitized filename for processing
+        local_in = f"/tmp/{sanitized_filename}"
         try:
             s3.download_file(bucket, key, local_in)
             print(f"[INFO] Downloaded s3://{bucket}/{key} to {local_in}")
@@ -219,6 +277,8 @@ def lambda_handler(event, context):
             "status": "done",
             "execution_id": context.aws_request_id,
             "input": f"s3://{bucket}/{key}",
+            "original_filename": original_filename,
+            "sanitized_filename": sanitized_filename,
             "output_dir": f"s3://{bucket}/output/",
             "output_zip": f"s3://{bucket}/output/{filename_base}.zip",
             "remediated_zip": f"s3://{bucket}/remediated/final_{filename_base}.zip"
