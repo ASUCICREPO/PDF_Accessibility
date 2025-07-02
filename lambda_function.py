@@ -98,7 +98,8 @@ def lambda_handler(event, context):
         # Use sanitized filename for all processing
         filename_base = os.path.splitext(sanitized_filename)[0]
         
-        # IDEMPOTENCY CHECK: Check if output already exists
+        # IDEMPOTENCY CHECK: Commented out as it's not useful for the current workflow
+        """
         # Try both sanitized and original filenames for backward compatibility
         output_check_keys = [
             f"output/{filename_base}.zip",  # Sanitized filename
@@ -126,9 +127,10 @@ def lambda_handler(event, context):
                 "input": f"s3://{bucket}/{key}",
                 "output_dir": f"s3://{bucket}/output/{filename_base}/"
             }
-            
-        # Otherwise continue with processing
-        print(f"[INFO] No existing output found, proceeding with processing")
+        """
+        
+        # Always proceed with processing
+        print(f"[INFO] Processing file without idempotency check")
 
         # 2) Download PDF to /tmp with sanitized filename for processing
         local_in = f"/tmp/{sanitized_filename}"

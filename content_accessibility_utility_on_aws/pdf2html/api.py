@@ -82,9 +82,9 @@ def cleanup_output_files(
     )
 
     if single_file:
-        # In single file mode, keep document.html and remove page-X.html files
+        # In single file mode, keep remediated.html and remove page-X.html files
         logger.debug(
-            "Single-page mode: keeping combined document.html and removing individual page files"
+            "Single-page mode: keeping combined remediated.html and removing individual page files"
         )
         for file in os.listdir(html_dir):
             if file.startswith("page-") and file.endswith(".html"):
@@ -96,17 +96,17 @@ def cleanup_output_files(
                 except Exception as e:
                     logger.warning(f"Failed to remove individual page file {file}: {e}")
     else:
-        # In multi-page mode (default), keep page-X.html files and remove combined document.html
+        # In multi-page mode (default), keep page-X.html files and remove combined remediated.html
         logger.debug(
-            "Multi-page mode: keeping individual page files and removing combined document.html"
+            "Multi-page mode: keeping individual page files and removing combined remediated.html"
         )
-        combined_file = os.path.join(html_dir, "document.html")
+        combined_file = os.path.join(html_dir, "remediated.html")
         if os.path.exists(combined_file):
             try:
                 os.remove(combined_file)
-                logger.debug("Removed combined document.html file in multi-page mode")
+                logger.debug("Removed combined remediated.html file in multi-page mode")
             except Exception as e:
-                logger.warning(f"Failed to remove combined document file: {e}")
+                logger.warning(f"Failed to remove combined remediated file: {e}")
 
 
 def convert_pdf_to_html(
@@ -296,28 +296,28 @@ def convert_pdf_to_html(
             html_dir = os.path.join(output_dir, "extracted_html")
 
             if options.get("single_file", False):
-                # In single file mode, only keep document.html
+                # In single file mode, only keep remediated.html
                 logger.debug(
-                    "Setting result for single-file mode: Using document.html as main path"
+                    "Setting result for single-file mode: Using remediated.html as main path"
                 )
                 result["html_files"] = [
                     f
                     for f in result.get("html_files", [])
                     if not (f.endswith(".html") and "page-" in os.path.basename(f))
                 ]
-                # Update html_path to point to document.html
-                result["html_path"] = os.path.join(html_dir, "document.html")
+                # Update html_path to point to remediated.html
+                result["html_path"] = os.path.join(html_dir, "remediated.html")
                 result["mode"] = "single-page"
             else:
                 # In multi-page mode (default or explicitly set)
                 logger.debug(
                     "Setting result for multi-page mode: Using individual page files"
                 )
-                # Filter out the document.html from html_files
+                # Filter out the remediated.html from html_files
                 page_files = [
                     f
                     for f in result.get("html_files", [])
-                    if not f.endswith("document.html")
+                    if not f.endswith("remediated.html")
                 ]
                 result["html_files"] = page_files
 

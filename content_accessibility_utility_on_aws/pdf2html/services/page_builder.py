@@ -337,7 +337,7 @@ def build_html_data(
         combined_html_parts.append("</body>\n</html>")
         combined_html = "\n".join(combined_html_parts)
         try:
-            combined_file_path = os.path.join(html_output_dir, "document.html")
+            combined_file_path = os.path.join(html_output_dir, "remediated.html")
             with open(combined_file_path, "w", encoding="utf-8") as f:
                 f.write(combined_html)
             extracted_html_files.insert(
