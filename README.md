@@ -1,4 +1,13 @@
-# PDF Processing AWS Infrastructure
+# PDF Accessibility Solutions
+
+This repository provides two complementary solutions for PDF accessibility:
+
+1. **PDF-to-PDF Remediation**: The solution that processes PDFs and maintains the PDF format while improving accessibility.
+2. **PDF-to-HTML Remediation**: A newer solution that converts PDFs to accessible HTML format.
+
+Both solutions leverage AWS services and generative AI to improve content accessibility according to WCAG 2.1 Level AA standards.
+
+## PDF-to-PDF Processing AWS Infrastructure
 
 This project builds an AWS infrastructure using AWS CDK (Cloud Development Kit) to split a PDF into chunks, process the chunks via AWS Step Functions, and merge the resulting chunks back using ECS tasks. The infrastructure also includes monitoring via CloudWatch dashboards and metrics for tracking progress.
 
@@ -199,11 +208,148 @@ For further assistance, please open an issue in this repository.
 
 For more details on the problem approach, industry impact, and our innovative solution developed by ASU CIC, please visit our blog: [PDF Accessibility Blog](https://smartchallenges.asu.edu/challenges/pdf-accessibility-ohio-state-university)
 
+## PDF-to-HTML Remediation Solution
 
+In addition to the PDF-to-PDF remediation solution above, this repository also includes a PDF-to-HTML conversion solution that transforms PDFs into accessible HTML format using AWS Bedrock Data Automation (BDA).
+
+### Overview
+
+The PDF-to-HTML solution converts PDF documents to accessible HTML format while preserving layout and visual appearance. It leverages AWS Bedrock Data Automation for PDF parsing and processing, and uses a serverless architecture with Lambda and S3 for scalable processing.
+
+### Directory Structure
+
+The PDF-to-HTML solution is contained in the `pdf2html` directory:
+
+```
+pdf2html/
+├── cdk/ (CDK infrastructure code)
+├── content_accessibility_utility_on_aws/ (Core utility package)
+├── lambda_function.py (Lambda handler for S3 events)
+├── Dockerfile (Container definition for Lambda)
+├── deploy.sh (Deployment script)
+└── README.md (Detailed documentation)
+```
+
+### Prerequisites
+
+Before deploying the PDF-to-HTML solution, ensure you have:
+
+1. **AWS Bedrock Access**: Ensure your AWS account has access to Amazon Bedrock services.
+2. **AWS CLI**: Installed and configured with appropriate credentials.
+3. **Node.js and npm**: For CDK deployment.
+4. **AWS CDK**: Installed globally (`npm install -g aws-cdk`).
+5. **Docker**: Installed and running.
+
+### Setup and Deployment
+
+1. **Clone the Repository**:
+   - Clone this repository containing the CDK code, Docker configurations, and Lambda functions.
+
+2. **Navigate to the pdf2html directory**:
+   ```bash
+   cd pdf2html
+   ```
+
+3. **Create a Bedrock Data Automation (BDA) Project**:
+   ```bash
+   aws bedrock-data-automation create-data-automation-project \
+       --project-name my-accessibility-project \
+       --standard-output-configuration '{"document": {"extraction": {"granularity": {"types": ["DOCUMENT", "PAGE", "ELEMENT"]},"boundingBox": {"state": "ENABLED"}},"generativeField": {"state": "DISABLED"},"outputFormat": {"textFormat": {"types": ["HTML"]},"additionalFileFormat": {"state": "ENABLED"}}}}'
+   ```
+   - Save the `projectArn` from the output for the next step.
+
+4. **Install Dependencies**:
+   ```bash
+    cd cdk
+    npm install
+    cd ..
+   ```
+
+5. **Run the Deployment Script**:
+   ```bash
+   ./deploy.sh --bda-project-arn <your-bda-project-arn>
+   ```
+
+   The script will:
+   - Create an S3 bucket for the pdf processing
+   - Create required folders in the bucket
+   - Create an ECR repository 
+   - Build and push the Docker image to ECR
+   - Deploy the CDK stack with all required resources
+
+   **Optional Parameters**:
+   - `--region`: AWS region to deploy to (default: us-east-1)
+   - `--stack-name`: Name of the CloudFormation stack (default: Pdf2HtmlStack)
+   - `--bucket-name`: Name of the S3 bucket (default: pdf2html-bucket-{account-id}-{region})
+   - `--force-redeploy`: Force redeployment by deleting existing stack
+
+6. **Verify Deployment**:
+   - The script will output the S3 bucket name, Lambda function name, and other resources created.
+
+### Usage
+
+Once deployed, the PDF-to-HTML solution works as follows:
+
+1. **Upload a PDF file**:
+   ```bash
+   Upload a pdf file in the uploads/ folder in s3 bucket
+   ```
+
+2. **Automatic Processing**:
+   - The Lambda function is triggered automatically when a PDF is uploaded
+   - The PDF is processed to extract text, layout, and images
+   - Accessibility issues are identified and remediated
+   - The result is a fully accessible HTML version of the PDF
+
+3. **Access the Results**:
+   - Check for remediated files:
+     ```bash
+     Final output is a zip file inside the remediated folder, download and unzip the file to find remediated.html
+     as your remediated html version of the pdf file.
+     ```
+
+### Architecture
+
+The PDF-to-HTML solution includes:
+- **S3 Bucket**: Stores input PDFs and remediated HTML files
+- **Lambda Function**: Processes PDFs using the PDF2HTML utility
+- **ECR Repository**: Hosts the Docker image for the Lambda function
+- **BDA Project**: Provides PDF parsing, extraction and remediation capabilities
+
+### Limitations
+
+- Preserves layout but may not perfectly match the original PDF appearance
+- Complex tables may require additional manual remediation
+- Some advanced PDF features (like forms) are converted to static HTML
+
+### Troubleshooting
+
+If you encounter issues with the PDF-to-HTML solution:
+
+- Check the Lambda function logs in CloudWatch Logs:
+  ```bash
+  aws logs describe-log-groups --log-group-name-prefix /aws/lambda/Pdf2HtmlPipeline
+  aws logs get-log-events --log-group-name /aws/lambda/Pdf2HtmlPipeline --log-stream-name <latest-log-stream>
+  ```
+
+- Verify S3 bucket permissions:
+  ```bash
+  aws s3api get-bucket-policy --bucket your-bucket-name
+  ```
+
+- Ensure the BDA project was created successfully:
+  ```bash
+  aws bedrock-data-automation get-data-automation-project --project-arn <your-bda-project-arn>
+  ```
+
+- Check that the Docker image was pushed to ECR correctly:
+  ```bash
+  aws ecr describe-images --repository-name pdf2html-lambda
+  ```
 
 ## Contributing
 
-Contributions to this project are welcome. Please fork the repository and submit a pull request with your changes
+Contributions to this project are welcome. Please fork the repository and submit a pull request with your changes.
 
 ## Release Notes
 
