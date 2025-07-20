@@ -262,6 +262,7 @@ Before deploying the PDF-to-HTML solution, ensure you have:
    ```bash
     cd cdk
     npm install
+    cdk bootstrap (if you haven't already / directly deploying pdf-to-html solution)
     cd ..
    ```
 
