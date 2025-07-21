@@ -85,7 +85,9 @@ class Pdf2HtmlStack extends Stack {
       memorySize: 1024,
       environment: {
         BDA_PROJECT_ARN: bdaProjectArn.valueAsString,
-        BDA_S3_BUCKET: bucketName.valueAsString
+        BDA_S3_BUCKET: bucketName.valueAsString,
+        BDA_OUTPUT_PREFIX: 'bda-processing',  // Use the new prefix for BDA output
+        CLEANUP_INTERMEDIATE_FILES: 'true'    // Enable cleanup of intermediate files
       },
     });
 

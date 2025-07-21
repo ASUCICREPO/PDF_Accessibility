@@ -306,8 +306,9 @@ class ExtendedBDAClient(BDAClient):
             if not self.s3_bucket:
                 raise ValueError("S3 bucket not configured")
 
-            # Upload PDF to S3 - simplified path structure
-            s3_key = f"uploads/{os.path.basename(pdf_path)}"
+            # Upload PDF to S3 - use a different prefix to avoid triggering Lambda again
+            # Use 'bda-inputs/' instead of 'uploads/' to prevent recursive triggers
+            s3_key = f"bda-inputs/{os.path.basename(pdf_path)}"
             s3_path = f"s3://{self.s3_bucket}/{s3_key}"
 
             logger.debug(f"Uploading {pdf_path} to {s3_path}")
@@ -331,7 +332,12 @@ class ExtendedBDAClient(BDAClient):
                 # with specific parameters
                 # Use a deterministic output path based on the PDF filename instead of random UUID
                 pdf_base = os.path.splitext(os.path.basename(pdf_path))[0]
-                default_output_path = f"s3://{self.s3_bucket}/output/{pdf_base}/"
+                
+                # Use environment variable for output prefix if available, otherwise use default
+                output_prefix = os.environ.get("BDA_OUTPUT_PREFIX", "bda-processing")
+                default_output_path = f"s3://{self.s3_bucket}/{output_prefix}/{pdf_base}/"
+                
+                logger.debug(f"Using BDA output path: {default_output_path}")
                 
                 # Use the correct method name and parameters
                 response = self.bda_runtime_client.invoke_data_automation_async(

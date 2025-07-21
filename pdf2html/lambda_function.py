@@ -77,16 +77,22 @@ def lambda_handler(event, context):
         
         print(f"[INFO] Processing s3://{bucket}/{key}")
         
-        # Check if the key is in the uploads/ folder to prevent infinite loops
+        # Enhanced filtering logic to prevent recursive processing
+        # 1. Check if the key is in the uploads/ folder to prevent infinite loops
         if not key.startswith("uploads/"):
             print(f"[INFO] Skipping non-uploads file: {key}")
             return {"status": "skipped", "message": "Not in uploads/ folder"}
             
-        # Additional check to ensure we're only processing PDF files
+        # 2. Additional check to ensure we're only processing PDF files
         if not key.lower().endswith('.pdf'):
             print(f"[INFO] Skipping non-PDF file: {key}")
             return {"status": "skipped", "message": "Not a PDF file"}
             
+        # 3. Ensure we're not processing any files that might be in uploads/ but are not direct uploads
+        # For example, skip any files in uploads/ that might be in subfolders
+        if key.count('/') > 1:
+            print(f"[INFO] Skipping file in subfolder: {key}")
+            return {"status": "skipped", "message": "File is in a subfolder"}
             
         # Extract filename for output paths
         original_filename = os.path.basename(key)
@@ -98,8 +104,7 @@ def lambda_handler(event, context):
         # Use sanitized filename for all processing
         filename_base = os.path.splitext(sanitized_filename)[0]
         
-        # IDEMPOTENCY CHECK: Commented out as it's not useful for the current workflow
-        """
+        # IDEMPOTENCY CHECK: Re-enabled to prevent reprocessing the same file
         # Try both sanitized and original filenames for backward compatibility
         output_check_keys = [
             f"output/{filename_base}.zip",  # Sanitized filename
@@ -127,10 +132,6 @@ def lambda_handler(event, context):
                 "input": f"s3://{bucket}/{key}",
                 "output_dir": f"s3://{bucket}/output/{filename_base}/"
             }
-        """
-        
-        # Always proceed with processing
-        print(f"[INFO] Processing file without idempotency check")
 
         # 2) Download PDF to /tmp with sanitized filename for processing
         local_in = f"/tmp/{sanitized_filename}"
@@ -188,35 +189,75 @@ def lambda_handler(event, context):
             else:
                 print(f"[WARNING] No index.html found in output directory")
                 
-            # 5) Clean up Bedrock intermediate files - COMMENTED OUT TO PRESERVE OUTPUT FILES
-            """
-            try:
-                # Delete the entire Bedrock output folder to prevent accumulation
-                bedrock_prefix = f"output/{filename_base}/"
-                print(f"[INFO] Cleaning up Bedrock intermediate files at s3://{bucket}/{bedrock_prefix}")
-                
-                # List all objects in the prefix
-                objects_to_delete = []
-                paginator = s3.get_paginator('list_objects_v2')
-                for page in paginator.paginate(Bucket=bucket, Prefix=bedrock_prefix):
-                    if 'Contents' in page:
-                        for obj in page['Contents']:
-                            objects_to_delete.append({'Key': obj['Key']})
-                
-                # Delete in batches of 1000 (S3 limit)
-                for i in range(0, len(objects_to_delete), 1000):
-                    response = s3.delete_objects(
-                        Bucket=bucket,
-                        Delete={'Objects': objects_to_delete[i:i+1000]}
-                    )
-                    print(f"[INFO] Deleted {len(response.get('Deleted', []))} files from {bedrock_prefix}")
-                    
-            except Exception as cleanup_error:
-                print(f"[WARNING] Failed to clean up Bedrock intermediate files: {cleanup_error}")
-            """
-            print(f"[INFO] Skipping cleanup of Bedrock intermediate files to preserve output files")
+            # 5) Clean up Bedrock intermediate files
+            # Check if cleanup is enabled via environment variable
+            cleanup_enabled = os.environ.get("CLEANUP_INTERMEDIATE_FILES", "true").lower() == "true"
             
-            # MOVED: Create the zip file at the end after all processing is complete
+            if cleanup_enabled:
+                try:
+                    # Get the BDA output prefix from environment variable
+                    bda_output_prefix = os.environ.get("BDA_OUTPUT_PREFIX", "bda-processing")
+                    bda_processing_prefix = f"{bda_output_prefix}/{filename_base}/"
+                    print(f"[INFO] Cleaning up Bedrock intermediate files at s3://{bucket}/{bda_processing_prefix}")
+                    
+                    # List all objects in the prefix
+                    objects_to_delete = []
+                    paginator = s3.get_paginator('list_objects_v2')
+                    for page in paginator.paginate(Bucket=bucket, Prefix=bda_processing_prefix):
+                        if 'Contents' in page:
+                            for obj in page['Contents']:
+                                objects_to_delete.append({'Key': obj['Key']})
+                    
+                    # Delete in batches of 1000 (S3 limit)
+                    if objects_to_delete:
+                        for i in range(0, len(objects_to_delete), 1000):
+                            response = s3.delete_objects(
+                                Bucket=bucket,
+                                Delete={'Objects': objects_to_delete[i:i+1000]}
+                            )
+                            print(f"[INFO] Deleted {len(response.get('Deleted', []))} files from {bda_processing_prefix}")
+                    else:
+                        print(f"[INFO] No files found to delete in {bda_processing_prefix}")
+                    
+                    # Clean up the BDA input file
+                    bda_input_key = f"bda-inputs/{sanitized_filename}"
+                    try:
+                        s3.delete_object(Bucket=bucket, Key=bda_input_key)
+                        print(f"[INFO] Deleted BDA input file: s3://{bucket}/{bda_input_key}")
+                    except Exception as e:
+                        print(f"[WARNING] Failed to delete BDA input file: {e}")
+                        
+                    # Also check for any old output folders that might exist
+                    old_output_prefix = f"output/{filename_base}/"
+                    if old_output_prefix != f"output/":  # Safety check to avoid deleting the entire output folder
+                        print(f"[INFO] Checking for old output files at s3://{bucket}/{old_output_prefix}")
+                        
+                        # List all objects in the old output prefix
+                        old_objects_to_delete = []
+                        for page in paginator.paginate(Bucket=bucket, Prefix=old_output_prefix):
+                            if 'Contents' in page:
+                                for obj in page['Contents']:
+                                    # Don't delete the main zip file
+                                    if not obj['Key'].endswith(f"{filename_base}.zip") and not obj['Key'].endswith(f"{filename_base}.html"):
+                                        old_objects_to_delete.append({'Key': obj['Key']})
+                        
+                        # Delete in batches of 1000 (S3 limit)
+                        if old_objects_to_delete:
+                            for i in range(0, len(old_objects_to_delete), 1000):
+                                response = s3.delete_objects(
+                                    Bucket=bucket,
+                                    Delete={'Objects': old_objects_to_delete[i:i+1000]}
+                                )
+                                print(f"[INFO] Deleted {len(response.get('Deleted', []))} old output files from {old_output_prefix}")
+                        else:
+                            print(f"[INFO] No old output files found to delete in {old_output_prefix}")
+                        
+                except Exception as cleanup_error:
+                    print(f"[WARNING] Failed to clean up intermediate files: {cleanup_error}")
+            else:
+                print(f"[INFO] Cleanup of intermediate files is disabled")
+            
+            # Create the zip file at the end after all processing is complete
             # This ensures all files are included in the zip
             zip_path = f"/tmp/{filename_base}.zip"
             
