@@ -38,8 +38,22 @@ phases:
           echo "PDF-to-PDF pre-build steps..."
           echo "Installing Python dependencies..."
           pip install -r requirements.txt
-          echo "Bootstrapping CDK environment..."
-          cdk bootstrap || true
+          echo "Bootstrapping CDK environment with retry logic..."
+          for i in {1..3}; do
+            echo "CDK bootstrap attempt $i/3..."
+            if cdk bootstrap; then
+              echo "CDK bootstrap successful on attempt $i"
+              break
+            else
+              echo "CDK bootstrap failed on attempt $i"
+              if [ $i -eq 3 ]; then
+                echo "All CDK bootstrap attempts failed, continuing anyway..."
+              else
+                echo "Waiting 15 seconds before retry..."
+                sleep 15
+              fi
+            fi
+          done
         fi
       
   build:
