@@ -158,7 +158,7 @@ ARTIFACTS='{"type": "NO_ARTIFACTS"}'
 SOURCE='{"type": "GITHUB", "location": "'"$GITHUB_URL"'"}'
 
 # Specify the source version (branch) you want to build (deployment branch)
-SOURCE_VERSION="code-deploy-automation"
+SOURCE_VERSION="pdf2html-subtree"
 
 echo "🚀 Step 4: Creating CodeBuild project..."
 echo "   📦 Project Name: $PROJECT_NAME"
