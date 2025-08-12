@@ -21,12 +21,18 @@ phases:
       - aws --version
       - docker --version
       - cdk --version
+      - echo "Current directory contents:"
+      - ls -la
+      - echo "Navigating to pdf2html directory:"
+      - cd pdf2html
+      - ls -la
       - echo "Logging in to Amazon ECR..."
       - aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
       
   build:
     commands:
       - echo "Build phase started on $(date)"
+      - cd pdf2html
       
       # Create S3 bucket if it doesn't exist
       - |
