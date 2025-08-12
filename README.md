@@ -11,160 +11,70 @@ Both solutions leverage AWS services and generative AI to improve content access
 
 This project builds an AWS infrastructure using AWS CDK (Cloud Development Kit) to split a PDF into chunks, process the chunks via AWS Step Functions, and merge the resulting chunks back using ECS tasks. The infrastructure also includes monitoring via CloudWatch dashboards and metrics for tracking progress.
 
-## Prerequisites
+### Automated One Click Deployment
 
-Before running the AWS CDK stack, ensure the following are installed and configured:
+#### Deployment Instructions
 
-1. **AWS Bedrock Access**: Ensure your AWS account has access to the Nova pro model in Amazon Bedrock.
-   - [Request access to Amazon Bedrock](https://console.aws.amazon.com/bedrock/) through the AWS console if not already enabled.
+#### Common Prerequisites
 
-2. **Adobe API Access** - An enterprise-level contract or a trial account (For Testing) for Adobe's API is required.
+1. **Fork this repository** to your own GitHub account (required for deployment and CI/CD):
+   - Navigate to https://github.com/ASUCICREPO/PDF_Accessibility
+   - Click the "Fork" button in the top right corner
+   - Select your GitHub account as the destination
+   - Wait for the forking process to complete
+   - You'll now have your own copy at https://github.com/YOUR-USERNAME/PDF_Accessibility
 
-   - [Adobe PDF Services API](https://acrobatservices.adobe.com/dc-integration-creation-app-cdn/main.html) to obtain API credentials.
-   
-4. **Python (3.7 or later)**  
-   - [Download Python](https://www.python.org/downloads/)  
-   - [Set up a virtual environment](https://docs.python.org/3/library/venv.html)  
-     ```bash
-     python -m venv .venv
-     source .venv/bin/activate  # For macOS/Linux
-     .venv\Scripts\activate     # For Windows
-     ```
-   - Also ensure that if you are using windows to confirm the python path in cmd before deploying. That can be done by running:
-     ```bash
-     where python
-     ```
+2. **Obtain a GitHub personal access token** with repo permissions (needed for CDK deployment):
+   - Go to GitHub Settings > Developer Settings > Personal Access Tokens > Tokens (classic)
+   - Click "Generate new token (classic)"
+   - Give the token a name and select the "repo" and "admin:repo_hook" scope
+   - Click "Generate token" and save the token securely
+   - For detailed instructions, see: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
 
-5. **AWS CLI**: To interact with AWS services and set up credentials.
+3. **Enable the following AWS Bedrock model** in your AWS account:
+   - NOVA_PRO
 
-   - [Install AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html)
-     
-6. **npm**  
-   - npm is required to install AWS CDK. Install npm by installing Node.js:  
-     - [Download Node.js](https://nodejs.org/) (includes npm).  
-   - Verify npm installation:  
-     ```bash
-     npm --version
-     ```
-7. **AWS CDK**: For defining cloud infrastructure in code.
-   - [Install AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html)  
-     ```bash
-     npm install -g aws-cdk
-     ```
+   To request access to this model:
+   - Navigate to the AWS Bedrock console
+   - Click "Model access" in the left navigation pane
+   - Click "Manage model access."
+   - Find the model in the list and select the checkbox next to it
+   - Click "Save changes" at the bottom of the page
+   - Wait for model access to be granted (usually within minutes)
+   - Verify access by checking the "Status" column shows "Access granted"
+   - Note: If you don't see the option to enable a model, ensure your AWS account and region support Bedrock model access. Contact AWS Support if needed.
 
-8. **Docker**: Required to build and run Docker images for the ECS tasks.  
-   - [Install Docker](https://docs.docker.com/get-docker/)  
-   - Verify installation:  
-     ```bash
-     docker --version
-     ```
-
-9. **AWS Account Permissions**  
-   - Ensure permissions to create and manage AWS resources like S3, Lambda, ECS, ECR, Step Functions, and CloudWatch.  
+5. **AWS Account Permissions**
+   - Ensure permissions to create and manage AWS resources like S3, Lambda, etc.
    - [AWS IAM Policies and Permissions](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html)
-   - Also, For the ease of deployment. Create a IAM user in the account you want to deploy to and attach adminstrator access to that user and use the Access key and Secret key for that user.
 
-## Directory Structure
+#### Deployment Using AWS CodeBuild and AWS Cloudshell
 
-Ensure your project has the following structure:
+**Prerequisites:**
+- Have access to CodeBuild and AWS Cloudshell
 
-```
-├── app.py (Main CDK app)
-├── lambda/
-│   ├── split_pdf/ (Python Lambda for splitting PDF)
-│   └── java_lambda/ (Java Lambda for merging PDFs)
-├── docker_autotag/ (Python Docker image for ECS task)
-└── javascript_docker/ (JavaScript Docker image for ECS task)
-|__ client_credentials.json (The client id and client secret id for adobe)
-```
+**Deployment:**
 
-## Setup and Deployment
+1. **Open AWS CloudShell** in your AWS Console:
+   - Click the CloudShell icon in the AWS Console navigation bar
+   - Wait for the CloudShell environment to initialize
 
-1. **Clone the Repository**:
-   - Clone this repository containing the CDK code, Docker configurations, and Lambda functions.
-     
-2. **Set Up Your Environment**:
-   - Configure AWS CLI with your AWS account credentials:
-     ```bash
-     aws configure
-     ```
-   - Make sure the region is set to
-     ```
-     us-east-1
-     ```
-     
-3. **Set Up CDK Environment**:
-   - Bootstrap your AWS environment for CDK (run only once per AWS account/region):
-     ```
-     cdk bootstrap
-     ```
-     
-4. **Create Adobe API Credentials**:
-   - Create a file called `client_credentials.json` in the root directory with the following structure:
-     ```json
-     {
-       "client_credentials": {
-         "PDF_SERVICES_CLIENT_ID": "<Your client ID here>",
-         "PDF_SERVICES_CLIENT_SECRET": "<Your secret ID here>"
-       }
-     }
-     ```
-   - Replace <Your Client ID here> and <Your Secret ID here> with your actual Client ID and Client Secret provided by Adobe and not the whole file.
+2. **Clone the repository** (Make sure to have your own forked copy of the repo and replace the link with the forked repository link):
+   ```bash
+   git clone https://github.com/<YOUR-USERNAME>/PDF_Accessibility
+   cd PDF_Accessibility/
+   ```
 
-5. **Upload Credentials to Secrets Manager**:
-   - Run this command in the terminal of the project to push the secret keys to secret manager:
-   - For Mac
-     ```
-     aws secretsmanager create-secret \
-         --name /myapp/client_credentials \
-         --description "Client credentials for PDF services" \
-         --secret-string file://client_credentials.json
-     ```
-   - For Windows
-     ```bash
-     aws secretsmanager create-secret --name /myapp/client_credentials --description "Client credentials for PDF services" --secret-string file://client_credentials.json
-     ```
-   - Run this command if you have already uploaded the keys earlier and would like to update the keys in secret manager.
-   - For Mac:
-     ```
-        aws secretsmanager update-secret \
-       --secret-id /myapp/client_credentials \
-       --description "Updated client credentials for PDF services" \
-       --secret-string file://client_credentials.json
-     ```
-   - For Windows:
-     ```bash
-     aws secretsmanager update-secret --secret-id /myapp/client_credentials --description "Updated client credentials for PDF services" --secret-string file://client_credentials.json
-     ```
-6. **Install the Requirements**:
-   - For both Mac and Windows
-   - ```bash
-     pip install -r requirements.txt
-     ```
-   
-8. **Connect to ECR**:
-   - Ensure Docker Desktop is running, then execute:
-     ```
-     aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
-     ```
-  
-9. **Set a environment variable once for deployment**
-   - An environment variable needs to be set before deployment. This step ensures compatibility and prevents deployment issues.
-   - For additional guidance or if you encounter any deployment issues, please refer to [Troubleshooting](#troubleshooting) section.
-   - For Mac,
-     ```
-     export BUILDX_NO_DEFAULT_ATTESTATIONS=1   
-     ```
-   - For Windows,
-     ```
-     set BUILDX_NO_DEFAULT_ATTESTATIONS=1
-     ```
-  
-10. **Deploy the CDK Stack**:
-   - Deploy the stack to AWS:
-     ```
-     cdk deploy
-     ```
+3. **Deploy using the deployment script** (recommended):
+   The script would prompt you for variables needed for deployment.
+   ```bash
+   chmod +x deploy.sh
+   ./deploy.sh
+   ```
+
+#### Manual CDK Deployment
+
+For manual deployment instructions, see our [Manual Deployment Guide](docs/MANUAL_DEPLOYMENT.md).
 
 ## Usage
 
@@ -181,13 +91,9 @@ Once the infrastructure is deployed:
 ## Limitations
 
 - This solution does not remediate corrupted PDFs.
-
 - It can process scanned PDFs, but the output accuracy is approximately 80%.
-
 - It does not remediate fillable forms.
-
 - It does not handle color selection/contrast adjustments.
-
 
 ## Troubleshooting
 
@@ -200,13 +106,15 @@ If you encounter any issues during setup or deployment, please check the followi
 Subprocess exited with error 9009 `, try changing ` "app": "python3 app.py" ` to  ` "app": "python app.py" ` in the cdk.json file
 - If the CDK deploy responds with: ` Resource handler returned message: "The maximum number of addresses has been reached. ` request additional IPs from AWS. Go to https://us-east-1.console.aws.amazon.com/servicequotas/home/services/ec2/quotas and search for "IP". Then, choose "EC2-VPC Elastic IPs". Note the AWS region is included in the URL, change it to the region you are deploying into. Requests for additional IPs are usually completed within minutes.
 - If any Docker images are not pushing to ECR, manually deploy to ECR using the push commands provided in the ECR console. Then, manually update the ECS service by creating a new revision of the task definition and updating the image URI with the one just deployed.
+
 For further assistance, please open an issue in this repository.
-- If you encounter issues with the 9th step, refer to the related discussion on the AWS CDK GitHub repository for further troubleshooting: [CDK Github Issue](https://github.com/aws/aws-cdk/issues/30258). You can also consult our [Troubleshooting CDK Deploy documentation](TROUBLESHOOTING_CDK_DEPLOY.md) for more detailed guidance.
+- If you encounter issues with deployment, refer to the related discussion on the AWS CDK GitHub repository for further troubleshooting: [CDK Github Issue](https://github.com/aws/aws-cdk/issues/30258). You can also consult our [Troubleshooting CDK Deploy documentation](docs/TROUBLESHOOTING_CDK_DEPLOY.md) for more detailed guidance.
 - If you continue to experience issues, please reach out to **ai-cic@amazon.com** for further assistance.
 
 ## Additional Resources
 
 For more details on the problem approach, industry impact, and our innovative solution developed by ASU CIC, please visit our blog: [PDF Accessibility Blog](https://smartchallenges.asu.edu/challenges/pdf-accessibility-ohio-state-university)
+
 
 ## PDF-to-HTML Remediation Solution
 

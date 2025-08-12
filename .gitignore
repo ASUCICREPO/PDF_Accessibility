@@ -16,3 +16,5 @@ __pycache__/
 *.pyc
 javascript_docker/node_modules
 lambda/add_title/venv
+.vscode/
+.vscode
