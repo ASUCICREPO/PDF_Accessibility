@@ -95,8 +95,22 @@ phases:
           
         elif [ "$DEPLOYMENT_TYPE" = "pdf2pdf" ]; then
           echo "Deploying PDF-to-PDF Remediation Solution..."
-          echo "Deploying CDK stacks..."
-          cdk deploy --all --require-approval never
+          echo "Deploying CDK stacks with retry logic..."
+          for i in {1..3}; do
+            echo "CDK deploy attempt $i/3..."
+            if cdk deploy --all --require-approval never; then
+              echo "CDK deploy successful on attempt $i"
+              break
+            else
+              echo "CDK deploy failed on attempt $i"
+              if [ $i -eq 3 ]; then
+                echo "All CDK deploy attempts failed"
+                exit 1
+              fi
+              echo "Waiting 30 seconds before retry..."
+              sleep 30
+            fi
+          done
           
         else
           echo "Invalid DEPLOYMENT_TYPE: $DEPLOYMENT_TYPE"
