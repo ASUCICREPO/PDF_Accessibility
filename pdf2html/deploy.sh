@@ -19,8 +19,8 @@ REGION="us-east-1"
 STACK_NAME="Pdf2HtmlStack"
 PROJECT_NAME="pdf2html-bda-project-$(date +%Y%m%d-%H%M%S)"
 
-print_status "🚀 PDF2HTML Accessibility Utility - One-Click Deployment"
-print_status "=================================================="
+print_status "🚀 PDF2HTML Accessibility Utility - Zero Dependencies Deployment"
+print_status "=============================================================="
 
 # Verify AWS credentials
 print_status "Verifying AWS credentials..."
@@ -69,11 +69,62 @@ BDA_RESPONSE=$(aws bedrock-data-automation create-data-automation-project \
 BDA_PROJECT_ARN=$(echo $BDA_RESPONSE | jq -r '.projectArn')
 print_success "✅ BDA project created: $PROJECT_NAME"
 
-# Create CodeBuild deployment
-print_status "Setting up CodeBuild for deployment..."
+# Create temporary resources for CodeBuild
+TIMESTAMP=$(date +%s)
+CODEBUILD_PROJECT="pdf2html-deploy-$TIMESTAMP"
+CODEBUILD_ROLE="pdf2html-codebuild-role-$TIMESTAMP"
+TEMP_BUCKET="temp-codebuild-$ACCOUNT_ID-$TIMESTAMP"
 
-# Create buildspec for CloudShell optimized deployment
-cat > buildspec.yml << 'EOF'
+print_status "Setting up CodeBuild for zero-dependency deployment..."
+
+# Create temporary S3 bucket for source code
+print_status "Creating temporary S3 bucket for source code..."
+if [ "$REGION" == "us-east-1" ]; then
+    aws s3api create-bucket --bucket $TEMP_BUCKET >/dev/null
+else
+    aws s3api create-bucket --bucket $TEMP_BUCKET --region $REGION --create-bucket-configuration LocationConstraint=$REGION >/dev/null
+fi
+
+# Create source archive (suppress tar warnings)
+print_status "Preparing source code..."
+tar --exclude='.git' --exclude='node_modules' --exclude='.DS_Store' --exclude='*.zip' -czf source.tar.gz . 2>/dev/null || {
+    print_warning "Tar completed with warnings (this is normal)"
+}
+aws s3 cp source.tar.gz s3://$TEMP_BUCKET/ >/dev/null
+
+# Create IAM role for CodeBuild
+print_status "Creating IAM role for CodeBuild..."
+
+cat > trust-policy.json << EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "codebuild.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+
+aws iam create-role \
+    --role-name $CODEBUILD_ROLE \
+    --assume-role-policy-document file://trust-policy.json >/dev/null
+
+# Attach comprehensive policy
+aws iam attach-role-policy \
+    --role-name $CODEBUILD_ROLE \
+    --policy-arn arn:aws:iam::aws:policy/PowerUserAccess >/dev/null
+
+# Wait for role propagation
+print_status "Waiting for IAM role to propagate..."
+sleep 20
+
+# Create buildspec content
+cat > buildspec.yml << EOF
 version: 0.2
 
 phases:
@@ -115,16 +166,16 @@ phases:
       # Create ECR repository
       - |
         REPO_NAME="pdf2html-lambda"
-        if ! aws ecr describe-repositories --repository-names $REPO_NAME --region $REGION 2>/dev/null; then
-          aws ecr create-repository --repository-name $REPO_NAME --region $REGION
+        if ! aws ecr describe-repositories --repository-names \$REPO_NAME --region $REGION 2>/dev/null; then
+          aws ecr create-repository --repository-name \$REPO_NAME --region $REGION
         fi
       
       # Build and push Docker image
       - echo "Building Docker image..."
       - REPO_URI="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/pdf2html-lambda"
-      - aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $REPO_URI
-      - docker build --platform linux/amd64 -t $REPO_URI:latest .
-      - docker push $REPO_URI:latest
+      - aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin \$REPO_URI
+      - docker build --platform linux/amd64 -t \$REPO_URI:latest .
+      - docker push \$REPO_URI:latest
       
       # Deploy with CDK
       - cd cdk
@@ -136,55 +187,6 @@ phases:
     commands:
       - echo "Deployment completed successfully!"
 EOF
-
-# Create temporary CodeBuild project
-CODEBUILD_PROJECT="pdf2html-deploy-$(date +%s)"
-CODEBUILD_ROLE="pdf2html-codebuild-role-$(date +%s)"
-
-print_status "Creating IAM role for CodeBuild..."
-
-# Create trust policy
-cat > trust-policy.json << EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "codebuild.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole"
-    }
-  ]
-}
-EOF
-
-# Create IAM role
-aws iam create-role \
-    --role-name $CODEBUILD_ROLE \
-    --assume-role-policy-document file://trust-policy.json >/dev/null
-
-# Attach comprehensive policy
-aws iam attach-role-policy \
-    --role-name $CODEBUILD_ROLE \
-    --policy-arn arn:aws:iam::aws:policy/PowerUserAccess
-
-# Wait for role propagation
-sleep 15
-
-# Create source bundle
-print_status "Preparing source code..."
-TEMP_BUCKET="temp-codebuild-$ACCOUNT_ID-$(date +%s)"
-
-if [ "$REGION" == "us-east-1" ]; then
-    aws s3api create-bucket --bucket $TEMP_BUCKET >/dev/null
-else
-    aws s3api create-bucket --bucket $TEMP_BUCKET --region $REGION --create-bucket-configuration LocationConstraint=$REGION >/dev/null
-fi
-
-# Create source archive excluding unnecessary files
-tar --exclude='.git' --exclude='node_modules' --exclude='.DS_Store' --exclude='*.zip' -czf source.tar.gz .
-aws s3 cp source.tar.gz s3://$TEMP_BUCKET/
 
 # Create CodeBuild project
 print_status "Creating CodeBuild project..."
@@ -233,12 +235,21 @@ print_status "Starting deployment build..."
 BUILD_ID=$(aws codebuild start-build --project-name $CODEBUILD_PROJECT --query 'build.id' --output text)
 
 print_status "Build ID: $BUILD_ID"
-print_status "Monitoring deployment progress..."
+print_status "Monitoring deployment progress (this takes 5-10 minutes)..."
 
-# Monitor build with progress indicator
+# Monitor build with better progress indication
 DOTS=0
+LAST_STATUS=""
 while true; do
     BUILD_STATUS=$(aws codebuild batch-get-builds --ids $BUILD_ID --query 'builds[0].buildStatus' --output text)
+    
+    # Show status change
+    if [ "$BUILD_STATUS" != "$LAST_STATUS" ]; then
+        echo ""
+        print_status "Build status: $BUILD_STATUS"
+        LAST_STATUS="$BUILD_STATUS"
+        DOTS=0
+    fi
     
     case $BUILD_STATUS in
         "SUCCEEDED")
@@ -250,18 +261,32 @@ while true; do
             echo ""
             print_error "❌ Deployment failed with status: $BUILD_STATUS"
             
-            # Get build logs
+            # Get build logs for debugging
+            print_error "Checking build logs..."
             LOG_GROUP="/aws/codebuild/$CODEBUILD_PROJECT"
-            print_error "Build logs:"
-            aws logs describe-log-streams --log-group-name $LOG_GROUP --order-by LastEventTime --descending --max-items 1 --query 'logStreams[0].logStreamName' --output text | xargs -I {} aws logs get-log-events --log-group-name $LOG_GROUP --log-stream-name {} --query 'events[*].message' --output text | tail -20
-            exit 1
+            
+            # Wait a moment for logs to be available
+            sleep 5
+            
+            # Try to get the latest log stream
+            LATEST_STREAM=$(aws logs describe-log-streams --log-group-name $LOG_GROUP --order-by LastEventTime --descending --max-items 1 --query 'logStreams[0].logStreamName' --output text 2>/dev/null || echo "")
+            
+            if [ -n "$LATEST_STREAM" ] && [ "$LATEST_STREAM" != "None" ]; then
+                print_error "Recent build logs:"
+                aws logs get-log-events --log-group-name $LOG_GROUP --log-stream-name $LATEST_STREAM --query 'events[-20:].message' --output text 2>/dev/null || print_error "Could not retrieve logs"
+            else
+                print_error "Could not retrieve build logs. Check CodeBuild console for details."
+            fi
+            
+            # Don't exit here, still clean up
+            break
             ;;
         "IN_PROGRESS")
             printf "."
             DOTS=$((DOTS + 1))
             if [ $DOTS -eq 60 ]; then
                 echo ""
-                print_status "Still deploying... This may take several minutes."
+                print_status "Still building... Please wait..."
                 DOTS=0
             fi
             sleep 5
@@ -282,32 +307,38 @@ aws iam detach-role-policy --role-name $CODEBUILD_ROLE --policy-arn arn:aws:iam:
 aws iam delete-role --role-name $CODEBUILD_ROLE >/dev/null 2>&1 || true
 rm -f buildspec.yml trust-policy.json project.json source.tar.gz
 
-# Get deployment info
-LAMBDA_FUNCTION=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='LambdaFunctionNameOutput'].OutputValue" --output text 2>/dev/null || echo "Not found")
+# Get deployment info (only if build succeeded)
+if [ "$BUILD_STATUS" == "SUCCEEDED" ]; then
+    print_status "Retrieving deployment information..."
+    LAMBDA_FUNCTION=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='LambdaFunctionNameOutput'].OutputValue" --output text 2>/dev/null || echo "Not found")
 
-echo ""
-print_success "🎊 PDF2HTML Accessibility Utility Deployed Successfully!"
-echo ""
-print_status "📋 Deployment Summary:"
-print_status "   AWS Account: $ACCOUNT_ID"
-print_status "   Region: $REGION"
-print_status "   S3 Bucket: $BUCKET_NAME"
-print_status "   Lambda Function: $LAMBDA_FUNCTION"
-print_status "   BDA Project: $PROJECT_NAME"
-echo ""
-print_status "🧪 Test Your Deployment:"
-print_status "1. Upload a PDF file:"
-print_status "   aws s3 cp your-file.pdf s3://$BUCKET_NAME/uploads/"
-echo ""
-print_status "2. Check processing results:"
-print_status "   aws s3 ls s3://$BUCKET_NAME/output/"
-echo ""
-print_status "3. Download processed files:"
-print_status "   aws s3 cp s3://$BUCKET_NAME/output/your-file.zip ./"
-print_status "   aws s3 cp s3://$BUCKET_NAME/remediated/final_your-file.zip ./"
-echo ""
-print_status "4. Monitor processing:"
-print_status "   aws logs tail /aws/lambda/$LAMBDA_FUNCTION --follow"
-echo ""
-print_success "🚀 Your PDF accessibility solution is ready to use!"
-print_warning "💡 Tip: The first PDF processing may take longer as Lambda cold starts. Subsequent processing will be faster."
+    echo ""
+    print_success "🎊 PDF2HTML Accessibility Utility Deployed Successfully!"
+    echo ""
+    print_status "📋 Deployment Summary:"
+    print_status "   AWS Account: $ACCOUNT_ID"
+    print_status "   Region: $REGION"
+    print_status "   S3 Bucket: $BUCKET_NAME"
+    print_status "   Lambda Function: $LAMBDA_FUNCTION"
+    print_status "   BDA Project: $PROJECT_NAME"
+    echo ""
+    print_status "🧪 Test Your Deployment:"
+    print_status "1. Upload a PDF file:"
+    print_status "   aws s3 cp your-file.pdf s3://$BUCKET_NAME/uploads/"
+    echo ""
+    print_status "2. Check processing results:"
+    print_status "   aws s3 ls s3://$BUCKET_NAME/output/"
+    echo ""
+    print_status "3. Download processed files:"
+    print_status "   aws s3 cp s3://$BUCKET_NAME/output/your-file.zip ./"
+    print_status "   aws s3 cp s3://$BUCKET_NAME/remediated/final_your-file.zip ./"
+    echo ""
+    print_status "4. Monitor processing:"
+    print_status "   aws logs tail /aws/lambda/$LAMBDA_FUNCTION --follow"
+    echo ""
+    print_success "🚀 Your PDF accessibility solution is ready to use!"
+    print_warning "💡 Tip: The first PDF processing may take longer as Lambda cold starts."
+else
+    print_error "Deployment failed. Please check the error messages above and try again."
+    exit 1
+fi
