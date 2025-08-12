@@ -1,0 +1,20 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.9   
+      nodejs: latest
+    commands:
+      - echo "Installing AWS CDK CLI..."
+      - npm install -g aws-cdk
+      - echo "Installing Python dependencies..."
+      - pip install -r requirements.txt
+  pre_build:
+    commands:
+      - echo "Bootstrapping CDK environment (safe if already bootstrapped)..."
+      - cdk bootstrap || true
+  build:
+    commands:
+      - echo "Deploying CDK stacks... now its the waiting time..."
+      - cdk deploy --all --require-approval never
