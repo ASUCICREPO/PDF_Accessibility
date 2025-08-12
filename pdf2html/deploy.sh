@@ -7,25 +7,25 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 print_status() { echo -e "${BLUE}[INFO]${NC} $1"; }
 print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Default values
+# Configuration
 REGION="us-east-1"
 STACK_NAME="Pdf2HtmlStack"
 PROJECT_NAME="pdf2html-bda-project-$(date +%Y%m%d-%H%M%S)"
 
-print_status "🚀 PDF2HTML Accessibility Utility - Zero Dependencies Deployment"
-print_status "=============================================================="
+print_status "🚀 PDF2HTML Accessibility Utility Deployment"
+print_status "============================================="
 
 # Verify AWS credentials
 print_status "Verifying AWS credentials..."
 ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/null || {
-    print_error "Failed to get AWS account ID. Please ensure you're in AWS CloudShell or have AWS CLI configured."
+    print_error "Failed to get AWS account ID. Please ensure AWS CLI is configured."
     exit 1
 })
 
@@ -69,32 +69,28 @@ BDA_RESPONSE=$(aws bedrock-data-automation create-data-automation-project \
 BDA_PROJECT_ARN=$(echo $BDA_RESPONSE | jq -r '.projectArn')
 print_success "✅ BDA project created: $PROJECT_NAME"
 
-# Create temporary resources for CodeBuild
+# Setup CodeBuild deployment
 TIMESTAMP=$(date +%s)
 CODEBUILD_PROJECT="pdf2html-deploy-$TIMESTAMP"
 CODEBUILD_ROLE="pdf2html-codebuild-role-$TIMESTAMP"
 TEMP_BUCKET="temp-codebuild-$ACCOUNT_ID-$TIMESTAMP"
 
-print_status "Setting up CodeBuild for zero-dependency deployment..."
+print_status "Setting up CodeBuild deployment..."
 
 # Create temporary S3 bucket for source code
-print_status "Creating temporary S3 bucket for source code..."
 if [ "$REGION" == "us-east-1" ]; then
     aws s3api create-bucket --bucket $TEMP_BUCKET >/dev/null
 else
     aws s3api create-bucket --bucket $TEMP_BUCKET --region $REGION --create-bucket-configuration LocationConstraint=$REGION >/dev/null
 fi
 
-# Create source archive (suppress tar warnings)
+# Create source archive
 print_status "Preparing source code..."
-tar --exclude='.git' --exclude='node_modules' --exclude='.DS_Store' --exclude='*.zip' -czf source.tar.gz . 2>/dev/null || {
-    print_warning "Tar completed with warnings (this is normal)"
-}
+tar --exclude='.git' --exclude='node_modules' --exclude='.DS_Store' -czf source.tar.gz . 2>/dev/null
 aws s3 cp source.tar.gz s3://$TEMP_BUCKET/ >/dev/null
 
 # Create IAM role for CodeBuild
 print_status "Creating IAM role for CodeBuild..."
-
 cat > trust-policy.json << EOF
 {
   "Version": "2012-10-17",
@@ -114,7 +110,6 @@ aws iam create-role \
     --role-name $CODEBUILD_ROLE \
     --assume-role-policy-document file://trust-policy.json >/dev/null
 
-# Attach comprehensive policy
 aws iam attach-role-policy \
     --role-name $CODEBUILD_ROLE \
     --policy-arn arn:aws:iam::aws:policy/PowerUserAccess >/dev/null
@@ -122,71 +117,6 @@ aws iam attach-role-policy \
 # Wait for role propagation
 print_status "Waiting for IAM role to propagate..."
 sleep 20
-
-# Create buildspec content
-cat > buildspec.yml << EOF
-version: 0.2
-
-phases:
-  install:
-    runtime-versions:
-      nodejs: 18
-      python: 3.11
-    commands:
-      - echo "Installing dependencies..."
-      - npm install -g aws-cdk@latest
-      - pip install --upgrade pip
-      
-  pre_build:
-    commands:
-      - echo "Pre-build phase started"
-      - aws --version
-      - docker --version
-      - cdk --version
-      
-  build:
-    commands:
-      - echo "Build phase started"
-      
-      # Create S3 bucket
-      - |
-        if ! aws s3api head-bucket --bucket $BUCKET_NAME 2>/dev/null; then
-          echo "Creating S3 bucket $BUCKET_NAME..."
-          if [ "$REGION" == "us-east-1" ]; then
-            aws s3api create-bucket --bucket $BUCKET_NAME --region $REGION
-          else
-            aws s3api create-bucket --bucket $BUCKET_NAME --region $REGION --create-bucket-configuration LocationConstraint=$REGION
-          fi
-          aws s3api put-bucket-versioning --bucket $BUCKET_NAME --versioning-configuration Status=Enabled
-          aws s3api put-object --bucket $BUCKET_NAME --key uploads/
-          aws s3api put-object --bucket $BUCKET_NAME --key output/
-          aws s3api put-object --bucket $BUCKET_NAME --key remediated/
-        fi
-      
-      # Create ECR repository
-      - |
-        REPO_NAME="pdf2html-lambda"
-        if ! aws ecr describe-repositories --repository-names \$REPO_NAME --region $REGION 2>/dev/null; then
-          aws ecr create-repository --repository-name \$REPO_NAME --region $REGION
-        fi
-      
-      # Build and push Docker image
-      - echo "Building Docker image..."
-      - REPO_URI="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/pdf2html-lambda"
-      - aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin \$REPO_URI
-      - docker build --platform linux/amd64 -t \$REPO_URI:latest .
-      - docker push \$REPO_URI:latest
-      
-      # Deploy with CDK
-      - cd cdk
-      - npm install
-      - npx cdk bootstrap aws://$ACCOUNT_ID/$REGION
-      - npx cdk deploy --app "node bin/app.js" --parameters BdaProjectArn=$BDA_PROJECT_ARN --parameters BucketName=$BUCKET_NAME --require-approval never
-      
-  post_build:
-    commands:
-      - echo "Deployment completed successfully!"
-EOF
 
 # Create CodeBuild project
 print_status "Creating CodeBuild project..."
@@ -237,19 +167,10 @@ BUILD_ID=$(aws codebuild start-build --project-name $CODEBUILD_PROJECT --query '
 print_status "Build ID: $BUILD_ID"
 print_status "Monitoring deployment progress (this takes 5-10 minutes)..."
 
-# Monitor build with better progress indication
+# Monitor build progress
 DOTS=0
-LAST_STATUS=""
 while true; do
     BUILD_STATUS=$(aws codebuild batch-get-builds --ids $BUILD_ID --query 'builds[0].buildStatus' --output text)
-    
-    # Show status change
-    if [ "$BUILD_STATUS" != "$LAST_STATUS" ]; then
-        echo ""
-        print_status "Build status: $BUILD_STATUS"
-        LAST_STATUS="$BUILD_STATUS"
-        DOTS=0
-    fi
     
     case $BUILD_STATUS in
         "SUCCEEDED")
@@ -261,24 +182,18 @@ while true; do
             echo ""
             print_error "❌ Deployment failed with status: $BUILD_STATUS"
             
-            # Get build logs for debugging
-            print_error "Checking build logs..."
+            # Get build logs
+            print_error "Build logs:"
             LOG_GROUP="/aws/codebuild/$CODEBUILD_PROJECT"
-            
-            # Wait a moment for logs to be available
             sleep 5
             
-            # Try to get the latest log stream
             LATEST_STREAM=$(aws logs describe-log-streams --log-group-name $LOG_GROUP --order-by LastEventTime --descending --max-items 1 --query 'logStreams[0].logStreamName' --output text 2>/dev/null || echo "")
             
             if [ -n "$LATEST_STREAM" ] && [ "$LATEST_STREAM" != "None" ]; then
-                print_error "Recent build logs:"
-                aws logs get-log-events --log-group-name $LOG_GROUP --log-stream-name $LATEST_STREAM --query 'events[-20:].message' --output text 2>/dev/null || print_error "Could not retrieve logs"
+                aws logs get-log-events --log-group-name $LOG_GROUP --log-stream-name $LATEST_STREAM --query 'events[-30:].message' --output text 2>/dev/null || print_error "Could not retrieve logs"
             else
                 print_error "Could not retrieve build logs. Check CodeBuild console for details."
             fi
-            
-            # Don't exit here, still clean up
             break
             ;;
         "IN_PROGRESS")
@@ -305,11 +220,10 @@ aws s3api delete-bucket --bucket $TEMP_BUCKET >/dev/null 2>&1 || true
 aws codebuild delete-project --name $CODEBUILD_PROJECT >/dev/null 2>&1 || true
 aws iam detach-role-policy --role-name $CODEBUILD_ROLE --policy-arn arn:aws:iam::aws:policy/PowerUserAccess >/dev/null 2>&1 || true
 aws iam delete-role --role-name $CODEBUILD_ROLE >/dev/null 2>&1 || true
-rm -f buildspec.yml trust-policy.json project.json source.tar.gz
+rm -f trust-policy.json project.json source.tar.gz
 
-# Get deployment info (only if build succeeded)
+# Show results if successful
 if [ "$BUILD_STATUS" == "SUCCEEDED" ]; then
-    print_status "Retrieving deployment information..."
     LAMBDA_FUNCTION=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='LambdaFunctionNameOutput'].OutputValue" --output text 2>/dev/null || echo "Not found")
 
     echo ""
@@ -331,13 +245,11 @@ if [ "$BUILD_STATUS" == "SUCCEEDED" ]; then
     echo ""
     print_status "3. Download processed files:"
     print_status "   aws s3 cp s3://$BUCKET_NAME/output/your-file.zip ./"
-    print_status "   aws s3 cp s3://$BUCKET_NAME/remediated/final_your-file.zip ./"
     echo ""
     print_status "4. Monitor processing:"
     print_status "   aws logs tail /aws/lambda/$LAMBDA_FUNCTION --follow"
     echo ""
     print_success "🚀 Your PDF accessibility solution is ready to use!"
-    print_warning "💡 Tip: The first PDF processing may take longer as Lambda cold starts."
 else
     print_error "Deployment failed. Please check the error messages above and try again."
     exit 1
