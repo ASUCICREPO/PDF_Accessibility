@@ -16,7 +16,7 @@ We provide a **unified deployment script** that allows you to deploy either or b
 **Common Requirements:**
 1. **AWS Account** with appropriate permissions to create and manage AWS resources
 2. **AWS CloudShell access** (AWS CLI is pre-installed and configured automatically)
-3. **Enable AWS Bedrock NOVA-PRO model** in your AWS account (For PDF to PDF remediation)
+3. **Enable AWS Bedrock NOVA-PRO model** in your AWS account (For PDF to PDF remediation)  
    **Enable AWS Bedrock NOVA-Lite model** in your AWS account (For PDF to HTML remediation)
    - Navigate to the AWS Bedrock console
    - Click "Model access" in the left navigation pane
