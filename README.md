@@ -16,7 +16,8 @@ We provide a **unified deployment script** that allows you to deploy either or b
 **Common Requirements:**
 1. **AWS Account** with appropriate permissions to create and manage AWS resources
 2. **AWS CloudShell access** (AWS CLI is pre-installed and configured automatically)
-3. **Enable AWS Bedrock NOVA-PRO model** in your AWS account (For PDF to PDF remediation)  
+3. **Deploy in US East 1 (N. Virginia) region** - The solution is optimized for the `us-east-1` region
+4. **Enable AWS Bedrock NOVA-PRO model** in your AWS account (For PDF to PDF remediation)  
    **Enable AWS Bedrock NOVA-Lite model** in your AWS account (For PDF to HTML remediation)
    - Navigate to the AWS Bedrock console
    - Click "Model access" in the left navigation pane
@@ -56,6 +57,60 @@ The script will guide you through:
 **Step 4: Test Your Deployment**
 
 After successful deployment, the script provides specific testing instructions for your chosen solution.
+
+### Testing Your PDF Accessibility Solution
+
+#### PDF-to-PDF Solution Testing
+
+1. **Navigate to Your S3 Bucket**
+   - In the AWS S3 Console, find the bucket starting with `pdfaccessibility-`
+   - This bucket was automatically created during deployment
+
+2. **Create the Input Folder**
+   - Create a folder named `pdf/` in the root of the bucket
+   - This is where you'll upload PDFs for processing
+
+3. **Upload Your PDF Files**
+   - Upload any PDF file(s) to the `pdf/` folder
+   - **Bulk Processing**: You can upload multiple PDFs simultaneously for batch remediation
+   - The process automatically triggers when files are uploaded
+
+4. **Monitor Processing**
+   - **Temporary Files**: A `temp/` folder will be created containing intermediate processing files
+   - **Final Results**: A `result/` folder will be created with your accessibility-compliant PDF files
+   - Use the CloudWatch dashboard to monitor processing progress
+
+5. **Download Results**
+   - Navigate to the `result/` folder to access your remediated PDFs
+   - Files maintain their original names with "COMPLIANT" prefix after accessibility improvements applied
+
+#### PDF-to-HTML Solution Testing
+
+1. **Navigate to Your S3 Bucket**
+   - In the AWS S3 Console, find the bucket starting with `pdf2html-bucket-`
+   - This bucket was automatically created during deployment
+
+2. **Upload Your PDF Files**
+   - Navigate to the `uploads/` folder (created automatically during deployment)
+   - Upload any PDF file you want to convert to accessible HTML
+
+3. **Monitor Processing**
+   - Processing automatically begins when files are uploaded
+   - Two folders will be created automatically:
+     - **`output/`**: Contains temporary processing data and intermediate files
+     - **`remediated/`**: Contains the final remediated results
+
+4. **Access Your Results**
+   - Navigate to the `remediated/` folder
+   - Download the zip file named `final_{your-filename}.zip`
+
+5. **Explore the Remediated Content**
+   The downloaded zip file contains:
+   - **`remediated.html`**: Final accessibility-compliant HTML version
+   - **`result.html`**: Original HTML conversion (before remediation)
+   - **`images/` folder**: Extracted images with generated alt text
+   - **`remediation_report.html`**: Detailed report of accessibility improvements made
+   - **`usage_data.json`**: Processing metrics and usage statistics
 
 ### Advanced Usage
 
