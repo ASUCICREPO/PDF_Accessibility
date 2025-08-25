@@ -143,12 +143,6 @@ This solution processes PDFs while maintaining the original PDF format. It uses 
 - **ECS Fargate**: Runs containerized processing tasks
 - **CloudWatch Dashboard**: Monitors progress and performance
 
-### Usage (After Deployment)
-
-1. **Find your S3 bucket** in the AWS Console (created during deployment)
-2. **Create a `pdf/` folder** in the bucket
-3. **Upload a PDF file** to the `pdf/` folder
-4. **Monitor progress** in the CloudWatch dashboard
 
 ### Manual Deployment
 
@@ -194,12 +188,6 @@ pdf2html/
 ├── lambda_function.py                           # Lambda handler for S3 events
 ├── Dockerfile                                   # Container definition for Lambda
 ```
-
-### Usage (After Deployment)
-
-1. **Find your S3 bucket** in the AWS Console (created during deployment)
-2. **Upload a PDF file** to the `uploads/` folder
-4. **Remediated Result** inside the `remediated/` folder 
 
 ## Monitoring
 
