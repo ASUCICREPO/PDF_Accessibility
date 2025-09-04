@@ -127,8 +127,8 @@ deploy_backend_solution() {
         # Get current region dynamically - no fallback to us-east-1
         REGION=$(aws configure get region 2>/dev/null)
         if [ -z "$REGION" ]; then
-            # Try to get region from instance metadata (for CloudShell/EC2)
-            REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null || echo "")
+            # Try to get region from instance metadata (for CloudShell/EC2) with timeout
+            REGION=$(timeout 3 curl -s http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null || echo "")
         fi
         
         if [ -z "$REGION" ]; then
