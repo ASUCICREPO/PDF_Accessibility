@@ -156,6 +156,10 @@ class PDFAccessibility(Stack):
                                                   name="model_arn_link",
                                                   value=model_arn_link
                                               ),
+                                            tasks.TaskEnvironmentVariable(
+                                                  name="AWS_REGION",
+                                                  value=region
+                                              ),
                                           ]
                                       )],
                                       launch_target=tasks.EcsFargateLaunchTarget(
