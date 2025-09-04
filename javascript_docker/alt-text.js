@@ -234,7 +234,7 @@ async function generateAltText(imageObject, imageBuffer) {
  */
 const invokeModel_alt_text_links = async (
     prompt = "Generate alt text for this link",
-    modelId = "amazon.nova-pro-v1:0"
+    modelId = "us.amazon.nova-pro-v1:0"
 ) => {
     logger.info(`generating link alt text`);
     const client = new BedrockRuntimeClient({ region: AWS_REGION });

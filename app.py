@@ -185,6 +185,10 @@ class PDFAccessibility(Stack):
                                                   name="S3_FILE_KEY",
                                                   value=sfn.JsonPath.string_at("$.Overrides.ContainerOverrides[0].Environment[1].Value")
                                               ),
+                                              tasks.TaskEnvironmentVariable(
+                                                  name="AWS_REGION",
+                                                  value=region
+                                              ),
                                           ]
                                       )],
                                       launch_target=tasks.EcsFargateLaunchTarget(
