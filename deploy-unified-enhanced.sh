@@ -124,7 +124,20 @@ deploy_backend_solution() {
             exit 1
         })
         
-        REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
+        # Get current region dynamically - no fallback to us-east-1
+        REGION=$(aws configure get region 2>/dev/null)
+        if [ -z "$REGION" ]; then
+            # Try to get region from instance metadata (for CloudShell/EC2)
+            REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null || echo "")
+        fi
+        
+        if [ -z "$REGION" ]; then
+            print_error "Could not determine AWS region. Please set your region:"
+            print_error "  aws configure set region <your-region>"
+            print_error "  Example: aws configure set region us-west-2"
+            exit 1
+        fi
+        
         print_success "✅ AWS credentials verified. Account: $ACCOUNT_ID, Region: $REGION"
         
         # Create BDA project
@@ -209,12 +222,8 @@ EOF
         ROLE_ARN=$(echo "$CREATE_ROLE_OUTPUT" | jq -r '.Role.Arn')
         print_success "✅ Role created with ARN: $ROLE_ARN"
 
-        # Attach appropriate policy based on solution type
-        if [ "$DEPLOYMENT_TYPE" == "pdf2pdf" ]; then
-            POLICY_ARN="arn:aws:iam::aws:policy/AdministratorAccess"
-        else
-            POLICY_ARN="arn:aws:iam::aws:policy/PowerUserAccess"
-        fi
+        # Attach AdministratorAccess policy for both solution types
+        POLICY_ARN="arn:aws:iam::aws:policy/AdministratorAccess"
         
         print_status "🔗 Attaching policy to role..."
         aws iam attach-role-policy --role-name "$ROLE_NAME" --policy-arn "$POLICY_ARN"

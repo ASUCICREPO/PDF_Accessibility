@@ -103,6 +103,11 @@ phases:
           echo "Bootstrapping CDK..."
           cd cdk
           npm install
+          
+          # Set CDK environment variables to ensure region consistency
+          export CDK_DEFAULT_ACCOUNT=$ACCOUNT_ID
+          export CDK_DEFAULT_REGION=$REGION
+          
           npx cdk bootstrap aws://$ACCOUNT_ID/$REGION
           echo "Deploying CDK stack..."
           npx cdk deploy --app "node bin/app.js" --parameters BdaProjectArn=$BDA_PROJECT_ARN --parameters BucketName=$BUCKET_NAME --require-approval never

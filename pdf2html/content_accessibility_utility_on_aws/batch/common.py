@@ -33,7 +33,7 @@ dynamodb = boto3.resource("dynamodb")
 sqs = boto3.client("sqs")
 
 # Constants
-DEFAULT_REGION = os.environ.get("AWS_REGION", "us-east-1")
+DEFAULT_REGION = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("CDK_DEFAULT_REGION")
 JOB_STATUS_TABLE = os.environ.get("JOB_STATUS_TABLE", "DocumentAccessibilityJobs")
 
 # Job status constants

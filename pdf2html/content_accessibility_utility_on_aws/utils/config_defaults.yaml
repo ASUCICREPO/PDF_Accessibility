@@ -28,5 +28,5 @@ remediate:
 
 # AWS service options
 aws:
-  region: "us-east-1"
+  region: null  # Will be dynamically set from environment
   create_bda_project: false

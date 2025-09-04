@@ -150,7 +150,12 @@ elif [ "$DEPLOYMENT_TYPE" == "pdf2html" ]; then
         exit 1
     })
     
-    REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
+    REGION=$(aws configure get region 2>/dev/null)
+    if [ -z "$REGION" ]; then
+        print_error "AWS region not configured. Please set your region:"
+        print_error "  aws configure set region <your-region>"
+        exit 1
+    fi
     print_success "✅ AWS credentials verified. Account: $ACCOUNT_ID, Region: $REGION"
     
     # Create BDA project
