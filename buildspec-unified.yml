@@ -73,6 +73,20 @@ phases:
               aws s3api create-bucket --bucket $BUCKET_NAME --region $REGION --create-bucket-configuration LocationConstraint=$REGION
             fi
             aws s3api put-bucket-versioning --bucket $BUCKET_NAME --versioning-configuration Status=Enabled
+            
+            # Set CORS policy
+            echo "Setting CORS policy for bucket..."
+            aws s3api put-bucket-cors --bucket $BUCKET_NAME --cors-configuration '{
+              "CORSRules": [
+                {
+                  "AllowedHeaders": ["*"],
+                  "AllowedMethods": ["GET", "HEAD", "PUT", "POST", "DELETE"],
+                  "AllowedOrigins": ["*"],
+                  "ExposeHeaders": []
+                }
+              ]
+            }'
+            
             aws s3api put-object --bucket $BUCKET_NAME --key uploads/
             aws s3api put-object --bucket $BUCKET_NAME --key output/
             aws s3api put-object --bucket $BUCKET_NAME --key remediated/

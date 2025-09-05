@@ -24,7 +24,15 @@ class PDFAccessibility(Stack):
         super().__init__(scope, construct_id, **kwargs)
         
         # S3 Bucket
-        bucket = s3.Bucket(self, "pdfaccessibilitybucket1", encryption=s3.BucketEncryption.S3_MANAGED, enforce_ssl=True)
+        bucket = s3.Bucket(self, "pdfaccessibilitybucket1", 
+                          encryption=s3.BucketEncryption.S3_MANAGED, 
+                          enforce_ssl=True,
+                          cors=[s3.CorsRule(
+                              allowed_headers=["*"],
+                              allowed_methods=[s3.HttpMethods.GET, s3.HttpMethods.HEAD, s3.HttpMethods.PUT, s3.HttpMethods.POST, s3.HttpMethods.DELETE],
+                              allowed_origins=["*"],
+                              exposed_headers=[]
+                          )])
     
 
         python_image_asset = ecr_assets.DockerImageAsset(self, "PythonImage",
