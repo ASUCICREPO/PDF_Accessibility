@@ -117,26 +117,7 @@ deploy_backend_solution() {
         print_status "🧠 PDF-to-HTML specific configuration..."
         echo ""
         
-        # Verify AWS credentials first
-        print_status "🔍 Verifying AWS credentials..."
-        ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/null || {
-            print_error "Failed to get AWS account ID. Please ensure AWS CLI is configured."
-            exit 1
-        })
-        
-        # Get current region from AWS CLI configuration
-        REGION=$(aws configure get region 2>/dev/null)
-        
-        if [ -z "$REGION" ]; then
-            print_error "Could not determine AWS region. Please set your region:"
-            print_error "  aws configure set region <your-region>"
-            print_error "  Example: aws configure set region us-west-2"
-            exit 1
-        fi
-        
-        print_success "✅ AWS credentials verified. Account: $ACCOUNT_ID, Region: $REGION"
-        
-        # Create BDA project
+        # Create BDA project (using already verified credentials and region)
         BDA_PROJECT_NAME="pdf2html-bda-project-$(date +%Y%m%d-%H%M%S)"
         print_status "Creating Bedrock Data Automation project: $BDA_PROJECT_NAME"
         
@@ -848,6 +829,35 @@ echo ""
 
 # Step 2: Common Configuration
 print_status "📋 Gathering deployment information..."
+echo ""
+
+# Verify AWS credentials and get region (common for both solutions)
+print_status "🔍 Verifying AWS credentials..."
+ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/null || {
+    print_error "Failed to get AWS account ID. Please ensure AWS CLI is configured."
+    exit 1
+})
+
+# Get current region from AWS CLI configuration
+REGION=$(aws configure get region 2>/dev/null)
+
+# Try alternative methods to get region
+if [ -z "$REGION" ]; then
+    REGION=$AWS_DEFAULT_REGION
+fi
+
+if [ -z "$REGION" ]; then
+    REGION=$(aws configure get region --profile default 2>/dev/null)
+fi
+
+if [ -z "$REGION" ]; then
+    print_error "Could not determine AWS region. Please set your region:"
+    print_error "  export AWS_DEFAULT_REGION=us-west-2"
+    print_error "  OR: aws configure set region us-west-2"
+    exit 1
+fi
+
+print_success "✅ AWS credentials verified. Account: $ACCOUNT_ID, Region: $REGION"
 echo ""
 
 # GitHub repository URL
