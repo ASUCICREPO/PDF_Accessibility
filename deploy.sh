@@ -677,7 +677,7 @@ deploy_ui() {
     UI_TEMP_DIR="/tmp/pdf-ui-deployment-$$"
     print_status "📥 Cloning UI repository..."
     
-    if ! git clone -b pdf2html https://github.com/ASUCICREPO/PDF_accessability_UI "$UI_TEMP_DIR" 2>/dev/null; then
+    if ! git clone -b updatedUI https://github.com/ASUCICREPO/PDF_accessability_UI "$UI_TEMP_DIR" 2>/dev/null; then
         print_error "Failed to clone UI repository. Check internet connection and repository access."
         return 1
     fi
@@ -691,13 +691,13 @@ deploy_ui() {
     export PROJECT_NAME="${PROJECT_NAME}-ui"
     export PDF_TO_PDF_BUCKET_ARN="$pdf_to_pdf_bucket"
     export PDF_TO_HTML_BUCKET_ARN="$pdf_to_html_bucket"
-    export TARGET_BRANCH="pdf2html"
+    export TARGET_BRANCH="updatedUI"
     
     print_status "🚀 Starting UI deployment..."
     print_status "   This may take 10-15 minutes..."
     
     # Verify UI deployment script exists
-    if [ ! -f "full-deploy.sh" ]; then
+    if [ ! -f "deploy.sh" ]; then
         print_error "UI deployment script not found in repository"
         cd "$ORIGINAL_DIR"
         rm -rf "$UI_TEMP_DIR"
@@ -705,10 +705,10 @@ deploy_ui() {
     fi
     
     # Make script executable and run
-    chmod +x full-deploy.sh
+    chmod +x deploy.sh
     
     # Run UI deployment script with error handling
-    if ./full-deploy.sh; then
+    if ./deploy.sh; then
         print_success "✅ UI deployment completed successfully!"
         
         # Extract Amplify URL from the deployment
