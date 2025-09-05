@@ -838,12 +838,12 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/
     exit 1
 })
 
-# Get current region from AWS CLI configuration
-REGION=$(aws configure get region 2>/dev/null)
+# Get current region from environment variable (CloudShell region)
+REGION=$AWS_DEFAULT_REGION
 
-# Try alternative methods to get region
+# Fallback to AWS CLI configuration if environment variable not set
 if [ -z "$REGION" ]; then
-    REGION=$AWS_DEFAULT_REGION
+    REGION=$(aws configure get region 2>/dev/null)
 fi
 
 if [ -z "$REGION" ]; then
