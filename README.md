@@ -39,8 +39,8 @@ cd PDF_Accessibility
 
 **Step 2: Run the Unified Deployment Script**
 ```bash
-chmod +x deploy-unified.sh
-./deploy-unified.sh
+chmod +x deploy.sh
+./deploy.sh
 ```
 
 **Step 3: Follow the Interactive Prompts**

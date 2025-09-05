@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ========================================================================
-# 🚀 PDF Accessibility Solutions - Enhanced Unified Deployment! 🚀
+# 🚀 PDF Accessibility Solutions - Unified Deployment Script! 🚀
 # ========================================================================
 # 
 # This script will help you deploy PDF accessibility solutions with options for:
@@ -452,8 +452,8 @@ deploy_ui() {
     fi
     
     # Determine bucket configuration for UI
-    local pdf_to_pdf_bucket=""
-    local pdf_to_html_bucket=""
+    local pdf_to_pdf_bucket="Null"
+    local pdf_to_html_bucket="Null"
     
     if [[ " ${DEPLOYED_SOLUTIONS[@]} " =~ " pdf2pdf " ]]; then
         pdf_to_pdf_bucket="$PDF2PDF_BUCKET"
@@ -463,26 +463,15 @@ deploy_ui() {
         pdf_to_html_bucket="$PDF2HTML_BUCKET"
     fi
     
-    # If only one solution deployed, use same bucket for both
-    if [ ${#DEPLOYED_SOLUTIONS[@]} -eq 1 ]; then
-        if [ -n "$pdf_to_pdf_bucket" ]; then
-            pdf_to_html_bucket="$pdf_to_pdf_bucket"
-            print_status "📝 Using PDF-to-PDF bucket for both UI configurations"
-        else
-            pdf_to_pdf_bucket="$pdf_to_html_bucket"
-            print_status "📝 Using PDF-to-HTML bucket for both UI configurations"
-        fi
-    fi
-    
-    # Validate bucket names
-    if [ -z "$pdf_to_pdf_bucket" ] && [ -z "$pdf_to_html_bucket" ]; then
-        print_error "No valid bucket names found. Cannot deploy UI."
+    # Validate that at least one solution was deployed
+    if [ "$pdf_to_pdf_bucket" == "Null" ] && [ "$pdf_to_html_bucket" == "Null" ]; then
+        print_error "No backend solutions deployed. Cannot deploy UI without backend."
         return 1
     fi
     
     print_status "🔧 UI Configuration:"
-    print_status "   PDF-to-PDF Bucket: ${pdf_to_pdf_bucket:-'Not configured'}"
-    print_status "   PDF-to-HTML Bucket: ${pdf_to_html_bucket:-'Not configured'}"
+    print_status "   PDF-to-PDF Bucket: $pdf_to_pdf_bucket"
+    print_status "   PDF-to-HTML Bucket: $pdf_to_html_bucket"
     echo ""
     
     # Store current directory
