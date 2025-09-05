@@ -218,11 +218,121 @@ EOF
         ROLE_ARN=$(echo "$CREATE_ROLE_OUTPUT" | jq -r '.Role.Arn')
         print_success "✅ Role created with ARN: $ROLE_ARN"
 
-        # Attach AdministratorAccess policy for both solution types
-        POLICY_ARN="arn:aws:iam::aws:policy/AdministratorAccess"
+        # Create minimal IAM policy based on solution type
+        if [ "$DEPLOYMENT_TYPE" == "pdf2pdf" ]; then
+            POLICY_NAME="${PROJECT_NAME}-pdf2pdf-codebuild-policy"
+            POLICY_DOCUMENT='{
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": ["iam:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": ["*"],
+                        "Resource": "*"
+                    }
+                ]
+            }'
+        else
+            # PDF-to-HTML minimal policy
+            POLICY_NAME="${PROJECT_NAME}-pdf2html-codebuild-policy"
+            POLICY_DOCUMENT='{
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Sid": "S3FullAccess",
+                        "Effect": "Allow",
+                        "Action": ["s3:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "ECRFullAccess",
+                        "Effect": "Allow",
+                        "Action": ["ecr:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "LambdaFullAccess",
+                        "Effect": "Allow",
+                        "Action": ["lambda:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "IAMFullAccess",
+                        "Effect": "Allow",
+                        "Action": ["iam:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "CloudFormationFullAccess",
+                        "Effect": "Allow",
+                        "Action": ["cloudformation:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "BedrockFullAccess",
+                        "Effect": "Allow",
+                        "Action": [
+                            "bedrock:*",
+                            "bedrock-data-automation:*",
+                            "bedrock-data-automation-runtime:*"
+                        ],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "CloudWatchLogsFullAccess",
+                        "Effect": "Allow",
+                        "Action": ["logs:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "STSAccess",
+                        "Effect": "Allow",
+                        "Action": [
+                            "sts:GetCallerIdentity",
+                            "sts:AssumeRole"
+                        ],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "SSMParameterAccess",
+                        "Effect": "Allow",
+                        "Action": [
+                            "ssm:GetParameter",
+                            "ssm:GetParameters",
+                            "ssm:PutParameter"
+                        ],
+                        "Resource": "*"
+                    }
+                ]
+            }'
+        fi
+        
+        # Create the policy
+        print_status "📋 Creating IAM policy: $POLICY_NAME"
+        POLICY_RESPONSE=$(aws iam create-policy \
+            --policy-name "$POLICY_NAME" \
+            --policy-document "$POLICY_DOCUMENT" \
+            --description "Minimal IAM policy for $DEPLOYMENT_TYPE CodeBuild deployment" 2>/dev/null || \
+            aws iam get-policy --policy-arn "arn:aws:iam::$ACCOUNT_ID:policy/$POLICY_NAME" 2>/dev/null)
+        
+        if [ $? -eq 0 ]; then
+            POLICY_ARN=$(echo "$POLICY_RESPONSE" | jq -r '.Policy.Arn // .Policy.Arn')
+            print_success "✅ Policy ready: $POLICY_NAME"
+        else
+            print_error "Failed to create or retrieve IAM policy"
+            exit 1
+        fi
         
         print_status "🔗 Attaching policy to role..."
         aws iam attach-role-policy --role-name "$ROLE_NAME" --policy-arn "$POLICY_ARN"
+        
+        # Store policy info for potential cleanup
+        CREATED_POLICY_ARN="$POLICY_ARN"
+        CREATED_POLICY_NAME="$POLICY_NAME"
 
         if [ $? -ne 0 ]; then
             print_error "Failed to attach policy."
