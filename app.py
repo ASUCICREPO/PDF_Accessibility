@@ -18,6 +18,7 @@ from aws_cdk import (
 )
 from constructs import Construct
 import platform
+import datetime
 
 class PDFAccessibility(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
@@ -389,7 +390,10 @@ class PDFAccessibility(Stack):
         accessibility_checker_post_log_group_name = f"aws/lambda/{a11y_postcheck.function_name}"
 
 
-        dashboard = cloudwatch.Dashboard(self, "PDF_Processing_Dashboard", dashboard_name="PDF_Processing_Dashboard",
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        dashboard_name = f"PDF_Processing_Dashboard-{timestamp}"
+        dashboard = cloudwatch.Dashboard(self, "PDF_Processing_Dashboard", dashboard_name=dashboard_name,
                                          variables=[cloudwatch.DashboardVariable(
                                             id="filename",
                                             type=cloudwatch.VariableType.PATTERN,
