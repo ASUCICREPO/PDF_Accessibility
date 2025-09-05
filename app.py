@@ -18,13 +18,32 @@ from aws_cdk import (
 )
 from constructs import Construct
 import platform
+import os
 
 class PDFAccessibility(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         
-        # S3 Bucket
-        bucket = s3.Bucket(self, "pdfaccessibilitybucket1", encryption=s3.BucketEncryption.S3_MANAGED, enforce_ssl=True)
+        # Environment context and tags
+        env_name = (self.node.try_get_context("env") or os.getenv("ENV", "dev")).lower()
+        stack_base = (self.node.try_get_context("stackBase") or os.getenv("STACK_BASE") or "pdfaccessibility").lower()
+        name_prefix = f"{stack_base}-{env_name}"
+        cdk.Tags.of(self).add("Environment", env_name)
+        cdk.Tags.of(self).add("Project", stack_base)
+
+        # Resolve account and region early for naming
+        account_id = Stack.of(self).account
+        region = Stack.of(self).region
+
+        # S3 Bucket (environment-specific name; include account for global uniqueness)
+        bucket = s3.Bucket(
+            self,
+            "pdfaccessibilitybucket1",
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            enforce_ssl=True,
+            # Name: <stackBase>-<env>-<account>-<region>
+            bucket_name=f"{stack_base}-{env_name}-{account_id}-{region}"
+        )
     
 
         python_image_asset = ecr_assets.DockerImageAsset(self, "PythonImage",
@@ -51,9 +70,16 @@ class PDFAccessibility(Stack):
                 ),
             ]
         )
+        # Name tag for VPC
+        cdk.Tags.of(vpc).add("Name", f"{name_prefix}-vpc")
 
         # ECS Cluster
-        cluster = ecs.Cluster(self, "FargateCluster", vpc=vpc)
+        cluster = ecs.Cluster(
+            self,
+            "FargateCluster",
+            vpc=vpc,
+            cluster_name=f"{name_prefix}-cluster",
+        )
 
         ecs_task_execution_role = iam.Role(self, "EcsTaskRole",
                                  assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
@@ -62,8 +88,6 @@ class PDFAccessibility(Stack):
             ])
 
         # Allow ECS Task Role to access Bedrock services
-        account_id = Stack.of(self).account
-        region = Stack.of(self).region
         
         ecs_task_role = iam.Role(self, "EcsTaskExecutionRole",
             assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
@@ -80,20 +104,20 @@ class PDFAccessibility(Stack):
             actions=["s3:*"],  # This gives access to all S3 actions
             resources=["*"],   # This applies the actions to all resources
         ))
-        ecs_task_role.add_to_policy(iam.PolicyStatement(actions=
-                                                        ["secretsmanager:GetSecretValue"], 
-                                                         resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/db_credentials"] )
-                                                         )
+        ecs_task_role.add_to_policy(iam.PolicyStatement(
+            actions=["secretsmanager:GetSecretValue"],
+            resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/{stack_base}/{env_name}/*"]
+        ))
         # Grant S3 read/write access to ECS Task Role
         bucket.grant_read_write(ecs_task_execution_role)
         # Create ECS Task Log Groups explicitly
         python_container_log_group = logs.LogGroup(self, "PythonContainerLogGroup",
-                                                log_group_name="/ecs/MyFirstTaskDef/PythonContainerLogGroup",
+                                                log_group_name=f"/ecs/{name_prefix}/python",
                                                 retention=logs.RetentionDays.ONE_WEEK,
                                                 removal_policy=cdk.RemovalPolicy.DESTROY)
 
         javascript_container_log_group = logs.LogGroup(self, "JavaScriptContainerLogGroup",
-                                                    log_group_name="/ecs/MySecondTaskDef/JavaScriptContainerLogGroup",
+                                                    log_group_name=f"/ecs/{name_prefix}/javascript",
                                                     retention=logs.RetentionDays.ONE_WEEK,
                                                     removal_policy=cdk.RemovalPolicy.DESTROY)
         # ECS Task Definitions
@@ -156,6 +180,14 @@ class PDFAccessibility(Stack):
                                                   name="model_arn_link",
                                                   value=model_arn_link
                                               ),
+                                            tasks.TaskEnvironmentVariable(
+                                                  name="STACK_BASE",
+                                                  value=stack_base
+                                              ),
+                                            tasks.TaskEnvironmentVariable(
+                                                  name="ENV",
+                                                  value=env_name
+                                              ),
                                           ]
                                       )],
                                       launch_target=tasks.EcsFargateLaunchTarget(
@@ -203,6 +235,7 @@ class PDFAccessibility(Stack):
         )
         java_lambda = lambda_.Function(
             self, 'JavaLambda',
+            function_name=f"{name_prefix}-pdf-merger",
             runtime=lambda_.Runtime.JAVA_21,
             handler='com.example.App::handleRequest',
             code=lambda_.Code.from_asset('lambda/java_lambda/PDFMergerLambda/target/PDFMergerLambda-1.0-SNAPSHOT.jar'),
@@ -232,6 +265,7 @@ class PDFAccessibility(Stack):
 
         add_title_lambda = lambda_.Function(
             self, 'AddTitleLambda',
+            function_name=f"{name_prefix}-add-title",
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler='myapp.lambda_handler',
             code=lambda_.Code.from_docker_build('lambda/add_title'),
@@ -265,18 +299,23 @@ class PDFAccessibility(Stack):
         
         a11y_precheck = lambda_.Function(
             self,'accessibility_checker_before_remidiation',
+            function_name=f"{name_prefix}-a11y-precheck",
             runtime=lambda_.Runtime.PYTHON_3_10,
             handler='main.lambda_handler',
             code=lambda_.Code.from_docker_build('lambda/accessibility_checker_before_remidiation'),
             timeout=Duration.seconds(900),
             memory_size=512,
             architecture=lambda_arch,
+            environment={
+                "STACK_BASE": stack_base,
+                "ENV": env_name,
+            }
         )
         
         a11y_precheck.add_to_role_policy(
             iam.PolicyStatement(
             actions=["secretsmanager:GetSecretValue"],
-            resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/*"]
+            resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/{stack_base}/{env_name}/client_credentials*"]
         ))
         bucket.grant_read_write(a11y_precheck)
         a11y_precheck.add_to_role_policy(cloudwatch_logs_policy)
@@ -291,18 +330,23 @@ class PDFAccessibility(Stack):
 
         a11y_postcheck = lambda_.Function(
             self,'accessibility_checker_after_remidiation',
+            function_name=f"{name_prefix}-a11y-postcheck",
             runtime=lambda_.Runtime.PYTHON_3_10,
             handler='main.lambda_handler',
             code=lambda_.Code.from_docker_build('lambda/accessability_checker_after_remidiation'),
             timeout=Duration.seconds(900),
             memory_size=512,
             architecture=lambda_arch,
+            environment={
+                "STACK_BASE": stack_base,
+                "ENV": env_name,
+            }
         )
         
         a11y_postcheck.add_to_role_policy(
             iam.PolicyStatement(
             actions=["secretsmanager:GetSecretValue"],
-            resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/*"]
+            resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/{stack_base}/{env_name}/client_credentials*"]
         ))
         bucket.grant_read_write(a11y_postcheck)
         a11y_postcheck.add_to_role_policy(cloudwatch_logs_policy)
@@ -323,23 +367,28 @@ class PDFAccessibility(Stack):
         parallel_state.branch(a11y_precheck_lambda_task)
 
         log_group_stepfunctions = logs.LogGroup(self, "StepFunctionLogs",
-            log_group_name="/aws/states/MyStateMachine_PDFAccessibility",
+            log_group_name=f"/aws/states/{name_prefix}-state-machine",
             retention=logs.RetentionDays.ONE_WEEK,
             removal_policy=cdk.RemovalPolicy.DESTROY
         )
         # State Machine
 
-        state_machine = sfn.StateMachine(self, "MyStateMachine",
-                                         definition=parallel_state,
-                                         timeout=Duration.minutes(150),
-                                         logs=sfn.LogOptions(
-                                             destination=log_group_stepfunctions,
-                                             level=sfn.LogLevel.ALL
-                                         ))
+        state_machine = sfn.StateMachine(
+            self,
+            "MyStateMachine",
+            definition=parallel_state,
+            timeout=Duration.minutes(150),
+            logs=sfn.LogOptions(
+                destination=log_group_stepfunctions,
+                level=sfn.LogLevel.ALL,
+            ),
+            state_machine_name=f"{name_prefix}-state-machine",
+        )
         
         # Lambda Function
         split_pdf_lambda = lambda_.Function(
             self, 'SplitPDF',
+            function_name=f"{name_prefix}-split-pdf",
             runtime=lambda_.Runtime.PYTHON_3_10,
             handler='main.lambda_handler',
             code=lambda_.Code.from_docker_build("lambda/split_pdf"),
@@ -370,10 +419,10 @@ class PDFAccessibility(Stack):
         java_lambda_log_group_name = f"/aws/lambda/{java_lambda.function_name}"
         add_title_lambda_log_group_name = f"/aws/lambda/{add_title_lambda.function_name}"
         accessibility_checker_pre_log_group_name = f"/aws/lambda/{a11y_precheck.function_name}"
-        accessibility_checker_post_log_group_name = f"aws/lambda/{a11y_postcheck.function_name}"
+        accessibility_checker_post_log_group_name = f"/aws/lambda/{a11y_postcheck.function_name}"
 
 
-        dashboard = cloudwatch.Dashboard(self, "PDF_Processing_Dashboard", dashboard_name="PDF_Processing_Dashboard",
+        dashboard = cloudwatch.Dashboard(self, "PDF_Processing_Dashboard", dashboard_name=f"PDF_Processing_Dashboard_{name_prefix}",
                                          variables=[cloudwatch.DashboardVariable(
                                             id="filename",
                                             type=cloudwatch.VariableType.PATTERN,
@@ -439,5 +488,24 @@ class PDFAccessibility(Stack):
         )
 
 app = cdk.App()
-PDFAccessibility(app, "PDFAccessibility")
+
+# Read environment name from context or ENV
+env_name = (app.node.try_get_context("env") or os.getenv("ENV", "dev")).lower()
+
+# Determine account/region from context or CLI-provided defaults (optional)
+account = app.node.try_get_context("account") or os.getenv("CDK_DEFAULT_ACCOUNT")
+region = app.node.try_get_context("region") or os.getenv("CDK_DEFAULT_REGION")
+
+# Stack name precedence: stackName > stackBase + env
+stack_name_override = app.node.try_get_context("stackName") or os.getenv("STACK_NAME")
+stack_base = app.node.try_get_context("stackBase") or os.getenv("STACK_BASE") or "pdfaccessibility"
+stack_name = stack_name_override or f"{stack_base}-{env_name}"
+
+# Allow CDK to infer env if not provided; use explicit env only when both exist
+stack_kwargs = {}
+if account and region:
+    stack_kwargs["env"] = cdk.Environment(account=account, region=region)
+
+PDFAccessibility(app, stack_name, **stack_kwargs)
+
 app.synth()

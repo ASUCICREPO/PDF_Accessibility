@@ -35,7 +35,7 @@ def save_to_s3(bucket_name, file_key):
 
         
 def get_secret(basefilename):
-    secret_name = "/myapp/client_credentials"
+    secret_name = f"/{os.getenv('STACK_BASE','pdfaccessibility')}/{os.getenv('ENV','dev')}/client_credentials"
     session = boto3.session.Session()
     client = session.client(
         service_name='secretsmanager'
