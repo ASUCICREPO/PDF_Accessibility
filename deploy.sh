@@ -220,18 +220,104 @@ EOF
 
         # Create minimal IAM policy based on solution type
         if [ "$DEPLOYMENT_TYPE" == "pdf2pdf" ]; then
+            # PDF-to-PDF minimal policy
             POLICY_NAME="${PROJECT_NAME}-pdf2pdf-codebuild-policy"
             POLICY_DOCUMENT='{
                 "Version": "2012-10-17",
                 "Statement": [
                     {
+                        "Sid": "S3FullAccess",
+                        "Effect": "Allow",
+                        "Action": ["s3:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "ECRFullAccess",
+                        "Effect": "Allow",
+                        "Action": ["ecr:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "LambdaFullAccess",
+                        "Effect": "Allow",
+                        "Action": ["lambda:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "ECSFullAccess",
+                        "Effect": "Allow",
+                        "Action": ["ecs:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "EC2FullAccess",
+                        "Effect": "Allow",
+                        "Action": ["ec2:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "StepFunctionsFullAccess",
+                        "Effect": "Allow",
+                        "Action": ["states:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "IAMFullAccess",
                         "Effect": "Allow",
                         "Action": ["iam:*"],
                         "Resource": "*"
                     },
                     {
+                        "Sid": "CloudFormationFullAccess",
                         "Effect": "Allow",
-                        "Action": ["*"],
+                        "Action": ["cloudformation:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "BedrockFullAccess",
+                        "Effect": "Allow",
+                        "Action": [
+                            "bedrock:*",
+                            "bedrock-data-automation:*",
+                            "bedrock-data-automation-runtime:*"
+                        ],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "CloudWatchLogsFullAccess",
+                        "Effect": "Allow",
+                        "Action": ["logs:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "CloudWatchFullAccess",
+                        "Effect": "Allow",
+                        "Action": ["cloudwatch:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "SecretsManagerFullAccess",
+                        "Effect": "Allow",
+                        "Action": ["secretsmanager:*"],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "STSAccess",
+                        "Effect": "Allow",
+                        "Action": [
+                            "sts:GetCallerIdentity",
+                            "sts:AssumeRole"
+                        ],
+                        "Resource": "*"
+                    },
+                    {
+                        "Sid": "SSMParameterAccess",
+                        "Effect": "Allow",
+                        "Action": [
+                            "ssm:GetParameter",
+                            "ssm:GetParameters",
+                            "ssm:PutParameter"
+                        ],
                         "Resource": "*"
                     }
                 ]
@@ -521,11 +607,11 @@ EOF
                 --output text 2>/dev/null | head -1)
         fi
         
-        # Method 4: Fallback to any bucket with pdfaccessibility in name
+        # Method 4: Get the most recently created bucket with pdfaccessibility in name
         if [ -z "$PDF2PDF_BUCKET" ] || [ "$PDF2PDF_BUCKET" == "None" ]; then
             PDF2PDF_BUCKET=$(aws s3api list-buckets \
-                --query 'Buckets[?contains(Name, `pdfaccessibility`)].Name' \
-                --output text 2>/dev/null | head -1)
+                --query 'Buckets[?contains(Name, `pdfaccessibility`)] | sort_by(@, &CreationDate) | [-1].Name' \
+                --output text 2>/dev/null)
         fi
         
         if [ -n "$PDF2PDF_BUCKET" ] && [ "$PDF2PDF_BUCKET" != "None" ]; then
