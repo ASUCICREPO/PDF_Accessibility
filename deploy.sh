@@ -860,21 +860,15 @@ fi
 print_success "✅ AWS credentials verified. Account: $ACCOUNT_ID, Region: $REGION"
 echo ""
 
-# GitHub repository URL
-if [ -z "$GITHUB_URL" ]; then
-    echo "🔗 GitHub Repository Configuration:"
-    read -p "   Enter your GitHub repository URL: " GITHUB_URL
-    print_success "   Repository: $GITHUB_URL ✅"
-    echo ""
-fi
+# GitHub repository URL (hardcoded)
+GITHUB_URL="https://github.com/ASUCICREPO/PDF_Accessibility.git"
+print_success "   Repository: $GITHUB_URL ✅"
+echo ""
 
-# CodeBuild project name
-if [ -z "$PROJECT_NAME" ]; then
-    echo "🏗️  CodeBuild Project Configuration:"
-    read -p "   Enter the CodeBuild project name: " PROJECT_NAME
-    print_success "   Project: $PROJECT_NAME ✅"
-    echo ""
-fi
+# CodeBuild project name (hardcoded with timestamp)
+PROJECT_NAME="pdfremediation-$(date +%Y%m%d%H%M%S)"
+print_success "   Project: $PROJECT_NAME ✅"
+echo ""
 
 # Step 3: Deploy first solution
 deploy_backend_solution "$DEPLOYMENT_TYPE" "$SOLUTION_NAME"
