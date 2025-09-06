@@ -567,6 +567,9 @@ EOF
         # Try multiple methods to get PDF-to-PDF bucket name
         print_status "🔍 Retrieving PDF-to-PDF bucket name..."
         
+        # Wait a moment for CloudFormation to complete
+        sleep 10
+        
         # Method 1: Try CloudFormation stack outputs
         PDF2PDF_BUCKET=$(aws cloudformation describe-stacks \
             --stack-name "PDFAccessibility" \
@@ -581,23 +584,24 @@ EOF
                 --output text 2>/dev/null | head -1)
         fi
         
-        # Method 3: Find bucket by naming pattern and creation time
-        if [ -z "$PDF2PDF_BUCKET" ] || [ "$PDF2PDF_BUCKET" == "None" ]; then
-            PDF2PDF_BUCKET=$(aws s3api list-buckets \
-                --query 'Buckets[?contains(Name, `pdfaccessibility`) && CreationDate >= `'$(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S)'`].Name' \
-                --output text 2>/dev/null | head -1)
-        fi
-        
-        # Method 4: Get the most recently created bucket with pdfaccessibility in name
+        # Method 3: Find bucket by naming pattern and recent creation
         if [ -z "$PDF2PDF_BUCKET" ] || [ "$PDF2PDF_BUCKET" == "None" ]; then
             PDF2PDF_BUCKET=$(aws s3api list-buckets \
                 --query 'Buckets[?contains(Name, `pdfaccessibility`)] | sort_by(@, &CreationDate) | [-1].Name' \
                 --output text 2>/dev/null)
         fi
         
+        # Method 4: Try CloudFormation resources directly
+        if [ -z "$PDF2PDF_BUCKET" ] || [ "$PDF2PDF_BUCKET" == "None" ]; then
+            PDF2PDF_BUCKET=$(aws cloudformation describe-stack-resources \
+                --stack-name "PDFAccessibility" \
+                --query 'StackResources[?ResourceType==`AWS::S3::Bucket`].PhysicalResourceId' \
+                --output text 2>/dev/null | head -1)
+        fi
+        
         if [ -n "$PDF2PDF_BUCKET" ] && [ "$PDF2PDF_BUCKET" != "None" ]; then
             DEPLOYED_BUCKETS+=("$PDF2PDF_BUCKET")
-            print_status "   📦 S3 Bucket: $PDF2PDF_BUCKET"
+            print_success "   📦 Auto-detected S3 Bucket: $PDF2PDF_BUCKET"
         else
             print_warning "   ⚠️ Could not automatically detect PDF-to-PDF bucket name"
             print_status "   Please check AWS Console for the bucket name starting with 'pdfaccessibility'"
@@ -606,7 +610,7 @@ EOF
     elif [ "$DEPLOYMENT_TYPE" == "pdf2html" ]; then
         PDF2HTML_BUCKET="$BUCKET_NAME"
         DEPLOYED_BUCKETS+=("$PDF2HTML_BUCKET")
-        print_status "   📦 S3 Bucket: $PDF2HTML_BUCKET"
+        print_success "   📦 Auto-configured S3 Bucket: $PDF2HTML_BUCKET"
         print_status "   🧠 BDA Project: $BDA_PROJECT_NAME"
     fi
     
@@ -617,145 +621,39 @@ EOF
     print_success "✅ $solution_name deployment summary complete!"
 }
 
-# Function to validate bucket exists
-validate_bucket() {
-    local bucket_name=$1
-    if [ "$bucket_name" != "Null" ] && [ -n "$bucket_name" ]; then
-        if aws s3api head-bucket --bucket "$bucket_name" 2>/dev/null; then
-            return 0
-        else
-            return 1
-        fi
-    fi
-    return 1
-}
-
-# Function to auto-detect deployed buckets
-detect_deployed_buckets() {
-    local detected_pdf2pdf=""
-    local detected_pdf2html=""
-    
-    print_status "🔍 Auto-detecting deployed buckets..."
-    
-    # Detect PDF-to-PDF bucket
-    if [ -z "$PDF2PDF_BUCKET" ] || [ "$PDF2PDF_BUCKET" == "Null" ]; then
-        # Method 1: CloudFormation stack outputs
-        detected_pdf2pdf=$(aws cloudformation describe-stacks \
-            --stack-name "PDFAccessibility" \
-            --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' \
-            --output text 2>/dev/null)
-        
-        # Method 2: Alternative output keys
-        if [ -z "$detected_pdf2pdf" ] || [ "$detected_pdf2pdf" == "None" ]; then
-            detected_pdf2pdf=$(aws cloudformation describe-stacks \
-                --stack-name "PDFAccessibility" \
-                --query 'Stacks[0].Outputs[?contains(OutputKey, `Bucket`)].OutputValue' \
-                --output text 2>/dev/null | head -1)
-        fi
-        
-        # Method 3: Recent buckets with naming pattern
-        if [ -z "$detected_pdf2pdf" ] || [ "$detected_pdf2pdf" == "None" ]; then
-            detected_pdf2pdf=$(aws s3api list-buckets \
-                --query 'Buckets[?contains(Name, `pdfaccessibility`)] | sort_by(@, &CreationDate) | [-1].Name' \
-                --output text 2>/dev/null)
-        fi
-        
-        if [ -n "$detected_pdf2pdf" ] && [ "$detected_pdf2pdf" != "None" ]; then
-            if validate_bucket "$detected_pdf2pdf"; then
-                PDF2PDF_BUCKET="$detected_pdf2pdf"
-            fi
-        fi
-    fi
-    
-    # Detect PDF-to-HTML bucket
-    if [ -z "$PDF2HTML_BUCKET" ] || [ "$PDF2HTML_BUCKET" == "Null" ]; then
-        detected_pdf2html=$(aws s3api list-buckets \
-            --query 'Buckets[?contains(Name, `pdf2html-bucket`)] | sort_by(@, &CreationDate) | [-1].Name' \
-            --output text 2>/dev/null)
-        
-        if [ -n "$detected_pdf2html" ] && [ "$detected_pdf2html" != "None" ]; then
-            if validate_bucket "$detected_pdf2html"; then
-                PDF2HTML_BUCKET="$detected_pdf2html"
-            fi
-        fi
-    fi
-    
-    print_status "   PDF-to-PDF: ${PDF2PDF_BUCKET:-"Not detected"}"
-    print_status "   PDF-to-HTML: ${PDF2HTML_BUCKET:-"Not detected"}"
-}
-
 # Function to deploy UI
 deploy_ui() {
     print_header "🎨 Deploying Frontend UI..."
     echo ""
     
-    # Auto-detect buckets from current session and previous deployments
-    detect_deployed_buckets
-    
-    # Determine bucket configuration for UI with user confirmation
-    local pdf_to_pdf_bucket="${PDF2PDF_BUCKET:-Null}"
-    local pdf_to_html_bucket="${PDF2HTML_BUCKET:-Null}"
-    
-    print_status "🔧 Detected UI Configuration:"
-    print_status "   PDF-to-PDF Bucket: $pdf_to_pdf_bucket"
-    print_status "   PDF-to-HTML Bucket: $pdf_to_html_bucket"
-    echo ""
-    
-    # Allow user to override detected values
-    echo "Would you like to modify the detected bucket names? (y/n)"
-    read -p "Enter your choice: " MODIFY_BUCKETS
-    
-    if [[ "$MODIFY_BUCKETS" =~ ^[Yy] ]]; then
-        echo ""
-        print_status "📝 Bucket Configuration Override:"
-        
-        echo "PDF-to-PDF Bucket (current: $pdf_to_pdf_bucket):"
-        echo "   Enter new name, 'null' to disable, or press Enter to keep current:"
-        read -p "   > " NEW_PDF2PDF
-        if [ -n "$NEW_PDF2PDF" ]; then
-            if [ "$NEW_PDF2PDF" == "null" ] || [ "$NEW_PDF2PDF" == "Null" ]; then
-                pdf_to_pdf_bucket="Null"
-            else
-                if validate_bucket "$NEW_PDF2PDF"; then
-                    pdf_to_pdf_bucket="$NEW_PDF2PDF"
-                    print_success "   ✅ Bucket validated: $NEW_PDF2PDF"
-                else
-                    print_warning "   ⚠️ Bucket '$NEW_PDF2PDF' not found, but will proceed"
-                    pdf_to_pdf_bucket="$NEW_PDF2PDF"
-                fi
-            fi
-        fi
-        
-        echo "PDF-to-HTML Bucket (current: $pdf_to_html_bucket):"
-        echo "   Enter new name, 'null' to disable, or press Enter to keep current:"
-        read -p "   > " NEW_PDF2HTML
-        if [ -n "$NEW_PDF2HTML" ]; then
-            if [ "$NEW_PDF2HTML" == "null" ] || [ "$NEW_PDF2HTML" == "Null" ]; then
-                pdf_to_html_bucket="Null"
-            else
-                if validate_bucket "$NEW_PDF2HTML"; then
-                    pdf_to_html_bucket="$NEW_PDF2HTML"
-                    print_success "   ✅ Bucket validated: $NEW_PDF2HTML"
-                else
-                    print_warning "   ⚠️ Bucket '$NEW_PDF2HTML' not found, but will proceed"
-                    pdf_to_html_bucket="$NEW_PDF2HTML"
-                fi
-            fi
-        fi
-        
-        print_success "✅ Updated bucket configuration"
-    fi
-    
-    # Validate that at least one solution bucket is available
-    if [ "$pdf_to_pdf_bucket" == "Null" ] && [ "$pdf_to_html_bucket" == "Null" ]; then
-        print_error "No backend solution buckets available. Cannot deploy UI without backend."
-        print_error "Please deploy at least one backend solution first."
+    # Validate that we have at least one deployed solution
+    if [ ${#DEPLOYED_SOLUTIONS[@]} -eq 0 ]; then
+        print_error "No backend solutions deployed. Cannot deploy UI without backend."
         return 1
     fi
     
-    print_status "🔧 Final UI Configuration:"
-    print_status "   PDF-to-PDF Bucket: $pdf_to_pdf_bucket"
-    print_status "   PDF-to-HTML Bucket: $pdf_to_html_bucket"
+    # Determine bucket configuration for UI
+    local pdf_to_pdf_bucket="Null"
+    local pdf_to_html_bucket="Null"
+    
+    if [[ " ${DEPLOYED_SOLUTIONS[@]} " =~ " pdf2pdf " ]]; then
+        pdf_to_pdf_bucket="$PDF2PDF_BUCKET"
+    fi
+    
+    if [[ " ${DEPLOYED_SOLUTIONS[@]} " =~ " pdf2html " ]]; then
+        pdf_to_html_bucket="$PDF2HTML_BUCKET"
+    fi
+    
+    # Validate that at least one solution was deployed
+    if [ "$pdf_to_pdf_bucket" == "Null" ] && [ "$pdf_to_html_bucket" == "Null" ]; then
+        print_error "No backend solutions deployed. Cannot deploy UI without backend."
+        return 1
+    fi
+    
+    print_status "🔧 UI Configuration (Auto-detected):"
+    print_success "   ✅ PDF-to-PDF Bucket: $pdf_to_pdf_bucket"
+    print_success "   ✅ PDF-to-HTML Bucket: $pdf_to_html_bucket"
+    print_status "   📝 Note: Bucket names were automatically detected from your deployments"
     echo ""
     
     # Store current directory
