@@ -567,9 +567,6 @@ EOF
         # Try multiple methods to get PDF-to-PDF bucket name
         print_status "🔍 Retrieving PDF-to-PDF bucket name..."
         
-        # Wait a moment for CloudFormation to complete
-        sleep 10
-        
         # Method 1: Try CloudFormation stack outputs
         PDF2PDF_BUCKET=$(aws cloudformation describe-stacks \
             --stack-name "PDFAccessibility" \
@@ -584,24 +581,23 @@ EOF
                 --output text 2>/dev/null | head -1)
         fi
         
-        # Method 3: Find bucket by naming pattern and recent creation
+        # Method 3: Find bucket by naming pattern and creation time
+        if [ -z "$PDF2PDF_BUCKET" ] || [ "$PDF2PDF_BUCKET" == "None" ]; then
+            PDF2PDF_BUCKET=$(aws s3api list-buckets \
+                --query 'Buckets[?contains(Name, `pdfaccessibility`) && CreationDate >= `'$(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S)'`].Name' \
+                --output text 2>/dev/null | head -1)
+        fi
+        
+        # Method 4: Get the most recently created bucket with pdfaccessibility in name
         if [ -z "$PDF2PDF_BUCKET" ] || [ "$PDF2PDF_BUCKET" == "None" ]; then
             PDF2PDF_BUCKET=$(aws s3api list-buckets \
                 --query 'Buckets[?contains(Name, `pdfaccessibility`)] | sort_by(@, &CreationDate) | [-1].Name' \
                 --output text 2>/dev/null)
         fi
         
-        # Method 4: Try CloudFormation resources directly
-        if [ -z "$PDF2PDF_BUCKET" ] || [ "$PDF2PDF_BUCKET" == "None" ]; then
-            PDF2PDF_BUCKET=$(aws cloudformation describe-stack-resources \
-                --stack-name "PDFAccessibility" \
-                --query 'StackResources[?ResourceType==`AWS::S3::Bucket`].PhysicalResourceId' \
-                --output text 2>/dev/null | head -1)
-        fi
-        
         if [ -n "$PDF2PDF_BUCKET" ] && [ "$PDF2PDF_BUCKET" != "None" ]; then
             DEPLOYED_BUCKETS+=("$PDF2PDF_BUCKET")
-            print_success "   📦 Auto-detected S3 Bucket: $PDF2PDF_BUCKET"
+            print_status "   📦 S3 Bucket: $PDF2PDF_BUCKET"
         else
             print_warning "   ⚠️ Could not automatically detect PDF-to-PDF bucket name"
             print_status "   Please check AWS Console for the bucket name starting with 'pdfaccessibility'"
@@ -610,7 +606,7 @@ EOF
     elif [ "$DEPLOYMENT_TYPE" == "pdf2html" ]; then
         PDF2HTML_BUCKET="$BUCKET_NAME"
         DEPLOYED_BUCKETS+=("$PDF2HTML_BUCKET")
-        print_success "   📦 Auto-configured S3 Bucket: $PDF2HTML_BUCKET"
+        print_status "   📦 S3 Bucket: $PDF2HTML_BUCKET"
         print_status "   🧠 BDA Project: $BDA_PROJECT_NAME"
     fi
     
@@ -650,10 +646,9 @@ deploy_ui() {
         return 1
     fi
     
-    print_status "🔧 UI Configuration (Auto-detected):"
-    print_success "   ✅ PDF-to-PDF Bucket: $pdf_to_pdf_bucket"
-    print_success "   ✅ PDF-to-HTML Bucket: $pdf_to_html_bucket"
-    print_status "   📝 Note: Bucket names were automatically detected from your deployments"
+    print_status "🔧 UI Configuration:"
+    print_status "   PDF-to-PDF Bucket: $pdf_to_pdf_bucket"
+    print_status "   PDF-to-HTML Bucket: $pdf_to_html_bucket"
     echo ""
     
     # Store current directory
