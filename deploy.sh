@@ -670,8 +670,8 @@ deploy_ui() {
     
     # Set environment variables for UI deployment
     export PROJECT_NAME="${PROJECT_NAME}-ui"
-    export PDF_TO_PDF_BUCKET_ARN="$pdf_to_pdf_bucket"
-    export PDF_TO_HTML_BUCKET_ARN="$pdf_to_html_bucket"
+    export PDF_TO_PDF_BUCKET="$pdf_to_pdf_bucket"
+    export PDF_TO_HTML_BUCKET="$pdf_to_html_bucket"
     export TARGET_BRANCH="updatedUI"
     
     print_status "🚀 Starting UI deployment..."
