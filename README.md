@@ -7,7 +7,7 @@ This repository provides two complementary solutions for PDF accessibility:
 
 Both solutions leverage AWS services and generative AI to improve content accessibility according to WCAG 2.1 Level AA standards.
 
-## Architecture
+## Architecture Overview
 
 ![Architecture Diagram](docs/images/architecture.png)
 
@@ -20,14 +20,16 @@ We provide a **unified deployment script** that allows you to deploy either or b
 **Common Requirements:**
 1. **AWS Account** with appropriate permissions to create and manage AWS resources
 2. **AWS CloudShell access** (AWS CLI is pre-installed and configured automatically)
-3. **Deploy in US East 1 (N. Virginia) region** - The solution is optimized for the `us-east-1` region
-4. **Enable AWS Bedrock NOVA-PRO model** in your AWS account (For PDF to PDF remediation)  
-   **Enable AWS Bedrock NOVA-Lite model** in your AWS account (For PDF to HTML remediation)
+   - Sign in to the AWS Management Console
+   - In the top navigation bar, click the CloudShell icon (terminal symbol) next to the search bar
+   - Wait for CloudShell to initialize (this may take a few moments on first use)
+3. **Enable AWS Bedrock Nova-Pro model** in your AWS account (For PDF to PDF remediation)  
+   **Enable AWS Bedrock Nova-Lite model** in your AWS account (For PDF to HTML remediation)
    - [Request access to Amazon Bedrock](https://console.aws.amazon.com/bedrock/) through the AWS console if not already enabled
    - Navigate to the AWS Bedrock console
    - Click "Model access" in the left navigation pane
    - Click "Manage model access"
-   - Find NOVA-PRO/NOVA-Lite in the list and select the checkbox
+   - Find Nova-Pro/Nova-Lite in the list and select the checkbox
    - Click "Save changes" and wait for access to be granted
 
 **Solution-Specific Requirements:**
@@ -35,15 +37,11 @@ We provide a **unified deployment script** that allows you to deploy either or b
   - **Adobe API Access** - An enterprise-level contract or a trial account (For Testing) for Adobe's API is required.
     - [Adobe PDF Services API](https://acrobatservices.adobe.com/dc-integration-creation-app-cdn/main.html) to obtain API credentials.
 - **PDF-to-HTML**: AWS Bedrock Data Automation service access
+  - Ensure you have access to create a Bedrock Data Automation project - usually present by default
 
 ### One-Click Deployment
 
 **Step 1: Open AWS CloudShell and Clone the Repository**
-
-To access AWS CloudShell:
-1. Sign in to the AWS Management Console
-2. In the top navigation bar, click the CloudShell icon (terminal symbol) next to the search bar
-3. Wait for CloudShell to initialize (this may take a few moments on first use)
 
 ```bash
 git clone https://github.com/ASUCICREPO/PDF_Accessibility.git
@@ -62,11 +60,11 @@ chmod +x deploy.sh
 The script will guide you through:
 
 1. **Solution Selection**: Choose between PDF-to-PDF or PDF-to-HTML remediation
-2. **Configuration**: Provide GitHub repository URL and CodeBuild project name
-3. **Solution-Specific Setup**:
+2. **Solution-Specific Setup**:
    - **PDF-to-PDF**: Enter Adobe API credentials (stored securely in AWS Secrets Manager)
    - **PDF-to-HTML**: Automatic creation of Bedrock Data Automation project
-4. **Automated Deployment**: Real-time monitoring of the deployment progress
+3. **Automated Deployment**: Real-time monitoring of the deployment progress
+4. **Optional UI Deployment**: After successful deployment of your chosen solution(s), you'll have the option to deploy a user interface as well
 
 **Step 4: Test Your Deployment**
 
@@ -86,7 +84,7 @@ After successful deployment, the script provides specific testing instructions f
 
 3. **Upload Your PDF Files**
    - Upload any PDF file(s) to the `pdf/` folder
-   - **Bulk Processing**: You can upload multiple PDFs simultaneously for batch remediation
+   - **Bulk Processing**: You can upload multiple PDFs in the bucket for batch remediation
    - The process automatically triggers when files are uploaded
 
 4. **Monitor Processing**
@@ -106,10 +104,10 @@ After successful deployment, the script provides specific testing instructions f
 
 2. **Upload Your PDF Files**
    - Navigate to the `uploads/` folder (created automatically during deployment)
-   - Upload any PDF file you want to convert to accessible HTML
+   - **Bulk Processing**: You can upload multiple PDFs in the bucket for batch remediation
+   - The process automatically triggers when files are uploaded
 
 3. **Monitor Processing**
-   - Processing automatically begins when files are uploaded
    - Two folders will be created automatically:
      - **`output/`**: Contains temporary processing data and intermediate files
      - **`remediated/`**: Contains the final remediated results
@@ -128,20 +126,12 @@ After successful deployment, the script provides specific testing instructions f
 
 ### Advanced Usage
 
-**Environment Variables (Optional)**
-You can pre-set these to skip prompts:
-```bash
-export GITHUB_URL="https://github.com/ASUCICREPO/PDF_Accessibility"
-export PROJECT_NAME="my-pdf-accessibility-project"
-export ADOBE_CLIENT_ID="your-adobe-client-id"        # For PDF-to-PDF only
-export ADOBE_CLIENT_SECRET="your-adobe-client-secret" # For PDF-to-PDF only
-```
-
 **Redeployment**
 After initial deployment, you can redeploy using the created CodeBuild project:
 ```bash
 aws codebuild start-build --project-name YOUR-PROJECT-NAME --source-version pdf2html-subtree
 ```
+Or simply re-run the deployment script and choose the solution your want redeploy.
 
 ## PDF-to-PDF Remediation Solution
 
@@ -157,26 +147,7 @@ This solution processes PDFs while maintaining the original PDF format. It uses 
 - **ECS Fargate**: Runs containerized processing tasks
 - **CloudWatch Dashboard**: Monitors progress and performance
 
-
 ### Manual Deployment
-
-For advanced users who prefer manual deployment:
-
-1. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   npm install -g aws-cdk
-   ```
-
-2. **Bootstrap CDK**:
-   ```bash
-   cdk bootstrap
-   ```
-
-3. **Deploy**:
-   ```bash
-   cdk deploy --all --require-approval never
-   ```
 
 For detailed manual deployment instructions, see our [Manual Deployment Guide](docs/MANUAL_DEPLOYMENT.md).
 
@@ -192,16 +163,6 @@ This solution converts PDF documents to accessible HTML format while preserving 
 - **Lambda Function**: Processes PDFs using containerized accessibility utility
 - **ECR Repository**: Hosts the Docker image for Lambda
 - **Bedrock Data Automation**: Provides PDF parsing and extraction capabilities
-
-### Directory Structure
-
-```
-pdf2html/
-├── cdk/                                          # CDK infrastructure code
-├── content_accessibility_utility_on_aws/        # Core utility package
-├── lambda_function.py                           # Lambda handler for S3 events
-├── Dockerfile                                   # Container definition for Lambda
-```
 
 ## Monitoring
 
