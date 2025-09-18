@@ -7,6 +7,10 @@ This repository provides two complementary solutions for PDF accessibility:
 
 Both solutions leverage AWS services and generative AI to improve content accessibility according to WCAG 2.1 Level AA standards.
 
+## Architecture
+
+![Architecture Diagram](docs/images/architecture.png)
+
 ## Automated One Click Deployment
 
 We provide a **unified deployment script** that allows you to deploy either or both the solutions with a single command. Choose your preferred solution during deployment:
@@ -19,6 +23,7 @@ We provide a **unified deployment script** that allows you to deploy either or b
 3. **Deploy in US East 1 (N. Virginia) region** - The solution is optimized for the `us-east-1` region
 4. **Enable AWS Bedrock NOVA-PRO model** in your AWS account (For PDF to PDF remediation)  
    **Enable AWS Bedrock NOVA-Lite model** in your AWS account (For PDF to HTML remediation)
+   - [Request access to Amazon Bedrock](https://console.aws.amazon.com/bedrock/) through the AWS console if not already enabled
    - Navigate to the AWS Bedrock console
    - Click "Model access" in the left navigation pane
    - Click "Manage model access"
@@ -26,15 +31,24 @@ We provide a **unified deployment script** that allows you to deploy either or b
    - Click "Save changes" and wait for access to be granted
 
 **Solution-Specific Requirements:**
-- **PDF-to-PDF**: Adobe PDF Services API credentials (Client ID and Secret)
+- **PDF-to-PDF**: 
+  - **Adobe API Access** - An enterprise-level contract or a trial account (For Testing) for Adobe's API is required.
+    - [Adobe PDF Services API](https://acrobatservices.adobe.com/dc-integration-creation-app-cdn/main.html) to obtain API credentials.
 - **PDF-to-HTML**: AWS Bedrock Data Automation service access
 
 ### One-Click Deployment
 
 **Step 1: Open AWS CloudShell and Clone the Repository**
+
+To access AWS CloudShell:
+1. Sign in to the AWS Management Console
+2. In the top navigation bar, click the CloudShell icon (terminal symbol) next to the search bar
+3. Wait for CloudShell to initialize (this may take a few moments on first use)
+
 ```bash
 git clone https://github.com/ASUCICREPO/PDF_Accessibility.git
 cd PDF_Accessibility
+git checkout pdf2html-subtree  
 ```
 
 **Step 2: Run the Unified Deployment Script**
