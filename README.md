@@ -7,7 +7,22 @@ This repository provides two complementary solutions for PDF accessibility:
 
 Both solutions leverage AWS services and generative AI to improve content accessibility according to WCAG 2.1 Level AA standards.
 
+## Table of Contents
+
+| Index | Description |
+|-------|-------------|
+| [Architecture Overview](#architecture-overview) | High level overview illustrating component interactions |
+| [Automated One Click Deployment](#automated-one-click-deployment) | How to deploy the project |
+| [Testing Your PDF Accessibility Solution](#testing-your-pdf-accessibility-solution) | User guide for the working solution |
+| [PDF-to-PDF Remediation Solution](#pdf-to-pdf-remediation-solution) | PDF format preservation solution details |
+| [PDF-to-HTML Remediation Solution](#pdf-to-html-remediation-solution) | HTML conversion solution details |
+| [Monitoring](#monitoring) | System monitoring and observability |
+| [Troubleshooting](#troubleshooting) | Common issues and solutions |
+| [Contributing](#contributing) | How to contribute to the project |
+
 ## Architecture Overview
+
+The following architecture diagram illustrates the various AWS components utilized to deliver the solution.
 
 ![Architecture Diagram](docs/images/architecture.png)
 
@@ -19,6 +34,7 @@ We provide a **unified deployment script** that allows you to deploy either or b
 
 **Common Requirements:**
 1. **AWS Account** with appropriate permissions to create and manage AWS resources
+   - See [IAM Permissions Guide](docs/IAM_PERMISSIONS.md) for detailed permission requirements
 2. **AWS CloudShell access** (AWS CLI is pre-installed and configured automatically)
    - Sign in to the AWS Management Console
    - In the top navigation bar, click the CloudShell icon (terminal symbol) next to the search bar
