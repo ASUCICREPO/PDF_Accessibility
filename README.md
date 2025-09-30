@@ -69,6 +69,31 @@ Ensure your project has the following structure:
 |__ client_credentials.json (The client id and client secret id for adobe)
 ```
 
+## Environment and Naming
+
+This project supports environment‑aware stack and resource naming to simplify multi‑env deployments.
+
+- name_prefix: Computed as `<stackBase>-<env>` (defaults: `stackBase=pdfaccessibility`, `env=dev`).
+- CloudFormation stack: Named `<stackBase>-<env>` unless overridden via `stackName`.
+- S3 bucket: Named `<stackBase>-<env>-<account>-<region>` (globally unique; lowercase and hyphenated).
+- ECS cluster: Named `<name_prefix>-cluster`.
+- Step Functions: Log group `/aws/states/<name_prefix>-state-machine` and state machine name `<name_prefix>-state-machine`.
+- CloudWatch dashboard: Named `PDF_Processing_Dashboard_<name_prefix>`.
+
+Common deploy patterns:
+
+- Minimal (uses active AWS profile for account/region):
+  - `cdk deploy -c env=dev`
+- Specify env and base:
+  - `cdk deploy -c env=prod -c stackBase=pdfrem`
+- Force an exact stack name:
+  - `cdk deploy -c stackName=pdfrem-bgdev`
+
+Account/Region inference:
+
+- You do not need to set `CDK_DEFAULT_ACCOUNT`/`CDK_DEFAULT_REGION`. If not provided, CDK uses the credentials of your current AWS CLI profile to infer them at deploy time.
+- If you prefer to pin them, pass `-c account=<acct> -c region=<region>` or export environment variables.
+
 ## Setup and Deployment
 
 1. **Clone the Repository**:
@@ -79,10 +104,7 @@ Ensure your project has the following structure:
      ```bash
      aws configure
      ```
-   - Make sure the region is set to
-     ```
-     us-east-1
-     ```
+   - Make sure a default region is set (example: `us-east-1`). The CDK will use your configured profile's region unless you explicitly pass one via `-c region=...`.
      
 3. **Set Up CDK Environment**:
    - Bootstrap your AWS environment for CDK (run only once per AWS account/region):
@@ -103,29 +125,29 @@ Ensure your project has the following structure:
    - Replace <Your Client ID here> and <Your Secret ID here> with your actual Client ID and Client Secret provided by Adobe and not the whole file.
 
 5. **Upload Credentials to Secrets Manager**:
-   - Run this command in the terminal of the project to push the secret keys to secret manager:
+   - Run this command in the terminal of the project to push the secret keys to Secrets Manager (namespaced by project/env):
    - For Mac
      ```
      aws secretsmanager create-secret \
-         --name /myapp/client_credentials \
+         --name /<stackBase>/<env>/client_credentials \
          --description "Client credentials for PDF services" \
          --secret-string file://client_credentials.json
      ```
    - For Windows
      ```bash
-     aws secretsmanager create-secret --name /myapp/client_credentials --description "Client credentials for PDF services" --secret-string file://client_credentials.json
+     aws secretsmanager create-secret --name /<stackBase>/<env>/client_credentials --description "Client credentials for PDF services" --secret-string file://client_credentials.json
      ```
    - Run this command if you have already uploaded the keys earlier and would like to update the keys in secret manager.
    - For Mac:
      ```
         aws secretsmanager update-secret \
-       --secret-id /myapp/client_credentials \
+       --secret-id /<stackBase>/<env>/client_credentials \
        --description "Updated client credentials for PDF services" \
        --secret-string file://client_credentials.json
      ```
    - For Windows:
      ```bash
-     aws secretsmanager update-secret --secret-id /myapp/client_credentials --description "Updated client credentials for PDF services" --secret-string file://client_credentials.json
+     aws secretsmanager update-secret --secret-id /<stackBase>/<env>/client_credentials --description "Updated client credentials for PDF services" --secret-string file://client_credentials.json
      ```
 6. **Install the Requirements**:
    - For both Mac and Windows
@@ -152,10 +174,10 @@ Ensure your project has the following structure:
      ```
   
 10. **Deploy the CDK Stack**:
-   - Deploy the stack to AWS:
-     ```
-     cdk deploy
-     ```
+   - Deploy the stack to AWS (environment‑aware naming):
+     - Minimal: `cdk deploy -c env=dev`
+     - Example prod: `cdk deploy -c env=prod -c stackBase=pdfrem`
+     - Exact stack name override: `cdk deploy -c stackName=pdfrem-bgdev`
 
 ## Usage
 

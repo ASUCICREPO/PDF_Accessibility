@@ -17,8 +17,7 @@ COPY package*.json ./
 # Install dependencies (force better-sqlite3 to build from source if necessary)
 RUN npm install 
 
-# Set environment variables
-ENV AWS_REGION="us-east-1"
+# Region is provided by task execution environment
 
 # Copy the rest of the application source code
 COPY . .

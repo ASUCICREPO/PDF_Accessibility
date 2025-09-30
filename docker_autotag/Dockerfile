@@ -1,8 +1,7 @@
 # Use an official Python runtime as a parent image
 FROM python:3.10-slim-buster
 
-# Set environment variables
-ENV AWS_REGION="us-east-1"
+# Region is provided by task execution environment
 
 # Set the working directory in the container to /app
 WORKDIR /app

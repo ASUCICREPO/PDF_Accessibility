@@ -52,7 +52,7 @@ const logger = winston.createLogger({
 });
 
 // Create an S3 client instance.
-const s3Client = new S3Client({ region: "us-east-1" });
+const s3Client = new S3Client({ region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION });
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));

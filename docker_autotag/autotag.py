@@ -128,11 +128,11 @@ def get_secret(basefilename):
     Returns:
         tuple: (client_id, client_secret)
     """
-    secret_name = "/myapp/client_credentials"
-    region_name = "us-east-1"
-
-
+    secret_name = f"/{os.getenv('STACK_BASE','pdfaccessibility')}/{os.getenv('ENV','dev')}/client_credentials"
     session = boto3.session.Session()
+    region_name = session.region_name
+
+
     client = session.client(
         service_name='secretsmanager',
         region_name=region_name
