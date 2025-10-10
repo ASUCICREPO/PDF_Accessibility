@@ -420,13 +420,13 @@ EOF
         BUILD_IMAGE="aws/codebuild/amazonlinux-x86_64-standard:5.0"
         COMPUTE_TYPE="BUILD_GENERAL1_SMALL"
         PRIVILEGED_MODE="false"
-        SOURCE_VERSION="pdf2html-subtree"  # Use pdf2html-subtree since buildspec only exists there
+        SOURCE_VERSION="main"
         BUILDSPEC_FILE="buildspec-unified.yml"
     else
         BUILD_IMAGE="aws/codebuild/amazonlinux2-x86_64-standard:5.0"
         COMPUTE_TYPE="BUILD_GENERAL1_LARGE"
         PRIVILEGED_MODE="true"
-        SOURCE_VERSION="pdf2html-subtree"
+        SOURCE_VERSION="main"
         BUILDSPEC_FILE="buildspec-unified.yml"
     fi
 

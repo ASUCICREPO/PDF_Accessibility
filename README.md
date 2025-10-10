@@ -62,7 +62,6 @@ We provide a **unified deployment script** that allows you to deploy either or b
 ```bash
 git clone https://github.com/ASUCICREPO/PDF_Accessibility.git
 cd PDF_Accessibility
-git checkout pdf2html-subtree  
 ```
 
 **Step 2: Run the Unified Deployment Script**
@@ -145,7 +144,7 @@ After successful deployment, the script provides specific testing instructions f
 **Redeployment**
 After initial deployment, you can redeploy using the created CodeBuild project:
 ```bash
-aws codebuild start-build --project-name YOUR-PROJECT-NAME --source-version pdf2html-subtree
+aws codebuild start-build --project-name YOUR-PROJECT-NAME --source-version main
 ```
 Or simply re-run the deployment script and choose the solution your want redeploy.
 
