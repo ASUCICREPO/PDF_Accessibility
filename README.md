@@ -9,16 +9,16 @@ Both solutions leverage AWS services and generative AI to improve content access
 
 ## Table of Contents
 
-| Index | Description |
-|-------|-------------|
-| [Architecture Overview](#architecture-overview) | High level overview illustrating component interactions |
-| [Automated One Click Deployment](#automated-one-click-deployment) | How to deploy the project |
-| [Testing Your PDF Accessibility Solution](#testing-your-pdf-accessibility-solution) | User guide for the working solution |
-| [PDF-to-PDF Remediation Solution](#pdf-to-pdf-remediation-solution) | PDF format preservation solution details |
-| [PDF-to-HTML Remediation Solution](#pdf-to-html-remediation-solution) | HTML conversion solution details |
-| [Monitoring](#monitoring) | System monitoring and observability |
-| [Troubleshooting](#troubleshooting) | Common issues and solutions |
-| [Contributing](#contributing) | How to contribute to the project |
+| Index                                                                               | Description                                             |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [Architecture Overview](#architecture-overview)                                     | High level overview illustrating component interactions |
+| [Automated One Click Deployment](#automated-one-click-deployment)                   | How to deploy the project                               |
+| [Testing Your PDF Accessibility Solution](#testing-your-pdf-accessibility-solution) | User guide for the working solution                     |
+| [PDF-to-PDF Remediation Solution](#pdf-to-pdf-remediation-solution)                 | PDF format preservation solution details                |
+| [PDF-to-HTML Remediation Solution](#pdf-to-html-remediation-solution)               | HTML conversion solution details                        |
+| [Monitoring](#monitoring)                                                           | System monitoring and observability                     |
+| [Troubleshooting](#troubleshooting)                                                 | Common issues and solutions                             |
+| [Contributing](#contributing)                                                       | How to contribute to the project                        |
 
 ## Architecture Overview
 
@@ -33,6 +33,7 @@ We provide a **unified deployment script** that allows you to deploy either or b
 ### Prerequisites
 
 **Common Requirements:**
+
 1. **AWS Account** with appropriate permissions to create and manage AWS resources
    - See [IAM Permissions Guide](docs/IAM_PERMISSIONS.md) for detailed permission requirements
 2. **AWS CloudShell access** (AWS CLI is pre-installed and configured automatically)
@@ -49,7 +50,8 @@ We provide a **unified deployment script** that allows you to deploy either or b
    - Click "Save changes" and wait for access to be granted
 
 **Solution-Specific Requirements:**
-- **PDF-to-PDF**: 
+
+- **PDF-to-PDF**:
   - **Adobe API Access** - An enterprise-level contract or a trial account (For Testing) for Adobe's API is required.
     - [Adobe PDF Services API](https://acrobatservices.adobe.com/dc-integration-creation-app-cdn/main.html) to obtain API credentials.
 - **PDF-to-HTML**: AWS Bedrock Data Automation service access
@@ -65,6 +67,7 @@ cd PDF_Accessibility
 ```
 
 **Step 2: Run the Unified Deployment Script**
+
 ```bash
 chmod +x deploy.sh
 ./deploy.sh
@@ -90,19 +93,23 @@ After successful deployment, the script provides specific testing instructions f
 #### PDF-to-PDF Solution Testing
 
 1. **Navigate to Your S3 Bucket**
+
    - In the AWS S3 Console, find the bucket starting with `pdfaccessibility-`
    - This bucket was automatically created during deployment
 
 2. **Create the Input Folder**
+
    - Create a folder named `pdf/` in the root of the bucket
    - This is where you'll upload PDFs for processing
 
 3. **Upload Your PDF Files**
+
    - Upload any PDF file(s) to the `pdf/` folder
    - **Bulk Processing**: You can upload multiple PDFs in the bucket for batch remediation
    - The process automatically triggers when files are uploaded
 
 4. **Monitor Processing**
+
    - **Temporary Files**: A `temp/` folder will be created containing intermediate processing files
    - **Final Results**: A `result/` folder will be created with your accessibility-compliant PDF files
    - Use the CloudWatch dashboard to monitor processing progress
@@ -114,20 +121,24 @@ After successful deployment, the script provides specific testing instructions f
 #### PDF-to-HTML Solution Testing
 
 1. **Navigate to Your S3 Bucket**
+
    - In the AWS S3 Console, find the bucket starting with `pdf2html-bucket-`
    - This bucket was automatically created during deployment
 
 2. **Upload Your PDF Files**
+
    - Navigate to the `uploads/` folder (created automatically during deployment)
    - **Bulk Processing**: You can upload multiple PDFs in the bucket for batch remediation
    - The process automatically triggers when files are uploaded
 
 3. **Monitor Processing**
+
    - Two folders will be created automatically:
      - **`output/`**: Contains temporary processing data and intermediate files
      - **`remediated/`**: Contains the final remediated results
 
 4. **Access Your Results**
+
    - Navigate to the `remediated/` folder
    - Download the zip file named `final_{your-filename}.zip`
 
@@ -143,9 +154,11 @@ After successful deployment, the script provides specific testing instructions f
 
 **Redeployment**
 After initial deployment, you can redeploy using the created CodeBuild project:
+
 ```bash
 aws codebuild start-build --project-name YOUR-PROJECT-NAME --source-version main
 ```
+
 Or simply re-run the deployment script and choose the solution your want redeploy.
 
 ## PDF-to-PDF Remediation Solution
@@ -182,11 +195,13 @@ This solution converts PDF documents to accessible HTML format while preserving 
 ## Monitoring
 
 ### PDF-to-PDF Solution
+
 - **CloudWatch Dashboard**: Automatically created during deployment
 - **Step Functions Console**: Monitor workflow executions
 - **ECS Console**: Track container task status
 
 ### PDF-to-HTML Solution
+
 - **Lambda Logs**: `/aws/lambda/Pdf2HtmlPipeline`
 - **S3 Events**: Monitor file processing status
 - **CloudWatch Metrics**: Track function performance
@@ -196,14 +211,17 @@ This solution converts PDF documents to accessible HTML format while preserving 
 ### Common Issues
 
 **AWS Credentials**
+
 - Ensure AWS CLI is configured with appropriate permissions
 - Verify access to required AWS services (S3, Lambda, ECS, Bedrock)
 
 **Service Limits**
+
 - Check AWS service quotas if deployment fails
 - Request additional Elastic IPs if needed: [EC2 Service Quotas](https://us-east-1.console.aws.amazon.com/servicequotas/home/services/ec2/quotas)
 
 **Build Failures**
+
 - Check CodeBuild console for detailed error messages
 - Verify all prerequisites are met
 - Ensure Docker is available for PDF-to-HTML deployments
@@ -211,11 +229,13 @@ This solution converts PDF documents to accessible HTML format while preserving 
 ### Solution-Specific Troubleshooting
 
 **PDF-to-PDF Issues**
+
 - Verify Adobe API credentials are correct and active
 - Check CloudWatch logs for Lambda functions and ECS tasks
 - Ensure NOVA_PRO Bedrock model access is granted
 
 **PDF-to-HTML Issues**
+
 - Verify Bedrock Data Automation permissions
 - Check Lambda function logs in CloudWatch
 - Ensure Docker image was pushed to ECR successfully
@@ -232,6 +252,10 @@ This solution converts PDF documents to accessible HTML format while preserving 
 ## Contributing
 
 Contributions to this project are welcome. Please fork the repository and submit a pull request with your changes.
+
+## Acknowledgments
+
+The PDF-to-HTML remediation functionality in this project is adapted from AWS Labs' [Content Accessibility Utility on AWS](https://github.com/awslabs/content-accessibility-utility-on-aws). This version includes updates and enhancements tailored for integration within the PDF Accessibility backend.
 
 ---
 
