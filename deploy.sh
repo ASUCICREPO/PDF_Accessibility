@@ -658,7 +658,7 @@ deploy_ui() {
     UI_TEMP_DIR="/tmp/pdf-ui-deployment-$$"
     print_status "📥 Cloning UI repository..."
     
-    if ! git clone -b updatedUI https://github.com/ASUCICREPO/PDF_accessability_UI "$UI_TEMP_DIR" 2>/dev/null; then
+    if ! git clone -b main https://github.com/ASUCICREPO/PDF_accessability_UI "$UI_TEMP_DIR" 2>/dev/null; then
         print_error "Failed to clone UI repository. Check internet connection and repository access."
         return 1
     fi
@@ -672,7 +672,7 @@ deploy_ui() {
     export PROJECT_NAME="${PROJECT_NAME}-ui"
     export PDF_TO_PDF_BUCKET="$pdf_to_pdf_bucket"
     export PDF_TO_HTML_BUCKET="$pdf_to_html_bucket"
-    export TARGET_BRANCH="updatedUI"
+    export TARGET_BRANCH="main"
     
     print_status "🚀 Starting UI deployment..."
     print_status "   This may take 10-15 minutes..."
