@@ -234,3 +234,15 @@ This solution converts PDF documents to accessible HTML format while preserving 
 Contributions to this project are welcome. Please fork the repository and submit a pull request with your changes.
 
 ---
+
+## Support
+
+For questions, issues, or support:
+
+- **Email**: ai-cic@amazon.com
+- **Issues**: [GitHub Issues](https://github.com/ASUCICREPO/PDF_Accessibility/issues)
+
+---
+
+**Built by Arizona State University's AI Cloud Innovation Center (AI CIC)**  
+**Powered by AWS**
