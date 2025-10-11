@@ -1,0 +1,32 @@
+# Copyright 2025 Amazon.com, Inc. or its affiliates.
+# SPDX-License-Identifier: Apache-2.0
+
+# Default configuration for the document_accessibility package
+
+# PDF to HTML conversion options
+pdf:
+  extract_images: true
+  image_format: "png"
+  embed_fonts: false
+  single_file: false
+  continuous: true
+  inline_css: false
+  embed_images: false
+  exclude_images: false
+  cleanup_bda_output: false
+  
+# Accessibility audit options  
+audit:
+  severity_threshold: "minor"  # Replaces min_severity for consistency
+  detailed_context: true
+  skip_automated_checks: false
+  
+# Accessibility remediation options
+remediate:
+  severity_threshold: "minor"  # Matches the audit parameter name
+  model_id: "us.amazon.nova-lite-v1:0"
+
+# AWS service options
+aws:
+  region: null  # Will be dynamically set from environment
+  create_bda_project: false

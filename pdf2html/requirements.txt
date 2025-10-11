@@ -1,0 +1,14 @@
+# Copyright 2025 Amazon.com, Inc. or its affiliates.
+# SPDX-License-Identifier: Apache-2.0
+
+# PDF to HTML conversion requirements
+Pillow>=11.1.0    # For image processing
+boto3>=1.37.11   # AWS SDK for Bedrock and S3 integration
+botocore>=1.37.11 # Core functionality for boto3
+beautifulsoup4>=4.11.0  # For HTML parsing and manipulation
+bs4>=0.0.1       # Wrapper for beautifulsoup4 (used in imports)
+pydantic>=2.10.6  # For data validation and parsing
+defusedcsv>=2.0.0 # For CSV parsing
+Flask>=3.1.0    # For HTML Template Parsing
+PyYaml>=6.0.0    # For YAML parsing
+pypdf>=5.4.0    

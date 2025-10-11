@@ -18,13 +18,22 @@ from aws_cdk import (
 )
 from constructs import Construct
 import platform
+import datetime
 
 class PDFAccessibility(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         
         # S3 Bucket
-        bucket = s3.Bucket(self, "pdfaccessibilitybucket1", encryption=s3.BucketEncryption.S3_MANAGED, enforce_ssl=True)
+        bucket = s3.Bucket(self, "pdfaccessibilitybucket1", 
+                          encryption=s3.BucketEncryption.S3_MANAGED, 
+                          enforce_ssl=True,
+                          cors=[s3.CorsRule(
+                              allowed_headers=["*"],
+                              allowed_methods=[s3.HttpMethods.GET, s3.HttpMethods.HEAD, s3.HttpMethods.PUT, s3.HttpMethods.POST, s3.HttpMethods.DELETE],
+                              allowed_origins=["*"],
+                              exposed_headers=[]
+                          )])
     
 
         python_image_asset = ecr_assets.DockerImageAsset(self, "PythonImage",
@@ -156,6 +165,10 @@ class PDFAccessibility(Stack):
                                                   name="model_arn_link",
                                                   value=model_arn_link
                                               ),
+                                            tasks.TaskEnvironmentVariable(
+                                                  name="AWS_REGION",
+                                                  value=region
+                                              ),
                                           ]
                                       )],
                                       launch_target=tasks.EcsFargateLaunchTarget(
@@ -180,6 +193,10 @@ class PDFAccessibility(Stack):
                                               tasks.TaskEnvironmentVariable(
                                                   name="S3_FILE_KEY",
                                                   value=sfn.JsonPath.string_at("$.Overrides.ContainerOverrides[0].Environment[1].Value")
+                                              ),
+                                              tasks.TaskEnvironmentVariable(
+                                                  name="AWS_REGION",
+                                                  value=region
                                               ),
                                           ]
                                       )],
@@ -373,7 +390,10 @@ class PDFAccessibility(Stack):
         accessibility_checker_post_log_group_name = f"aws/lambda/{a11y_postcheck.function_name}"
 
 
-        dashboard = cloudwatch.Dashboard(self, "PDF_Processing_Dashboard", dashboard_name="PDF_Processing_Dashboard",
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        dashboard_name = f"PDF_Processing_Dashboard-{timestamp}"
+        dashboard = cloudwatch.Dashboard(self, "PDF_Processing_Dashboard", dashboard_name=dashboard_name,
                                          variables=[cloudwatch.DashboardVariable(
                                             id="filename",
                                             type=cloudwatch.VariableType.PATTERN,

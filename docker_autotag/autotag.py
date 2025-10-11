@@ -129,7 +129,7 @@ def get_secret(basefilename):
         tuple: (client_id, client_secret)
     """
     secret_name = "/myapp/client_credentials"
-    region_name = "us-east-1"
+    region_name = os.environ.get('AWS_REGION', os.environ.get('AWS_DEFAULT_REGION', os.environ.get('CDK_DEFAULT_REGION')))
 
 
     session = boto3.session.Session()

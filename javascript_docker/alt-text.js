@@ -52,7 +52,8 @@ const logger = winston.createLogger({
 });
 
 // Create an S3 client instance.
-const s3Client = new S3Client({ region: "us-east-1" });
+const AWS_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || process.env.CDK_DEFAULT_REGION;
+const s3Client = new S3Client({ region: AWS_REGION });
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -75,7 +76,7 @@ const invokeModel = async (
     imageBuffer = null,
 ) => {
     // Create a new Bedrock Runtime client instance.
-    const client = new BedrockRuntimeClient({ region: "us-east-1" });
+    const client = new BedrockRuntimeClient({ region: AWS_REGION });
     const model_arn_image = process.env.model_arn_image;
     
     // Convert the image buffer to a base64-encoded string
@@ -117,7 +118,7 @@ const invokeModel = async (
 
     // Invoke the model with the payload and wait for the response.
     const command = new InvokeModelCommand({
-        modelId: "amazon.nova-pro-v1:0", // Replace with your model ID
+        modelId: "us.amazon.nova-pro-v1:0", // Replace with your model ID
         contentType: "application/json",
         accept: "application/json",
         body: JSON.stringify(payload)
@@ -233,10 +234,10 @@ async function generateAltText(imageObject, imageBuffer) {
  */
 const invokeModel_alt_text_links = async (
     prompt = "Generate alt text for this link",
-    modelId = "amazon.nova-pro-v1:0"
+    modelId = "us.amazon.nova-pro-v1:0"
 ) => {
     logger.info(`generating link alt text`);
-    const client = new BedrockRuntimeClient({ region: "us-east-1" });
+    const client = new BedrockRuntimeClient({ region: AWS_REGION });
     const model_arn_link = process.env.model_arn_link
     const payload = {
         system: [
@@ -265,7 +266,7 @@ const invokeModel_alt_text_links = async (
 
     // Invoke the model with the payload and wait for the response.
     const command = new InvokeModelCommand({
-        modelId: "amazon.nova-pro-v1:0", // Replace with your model ID
+        modelId: "us.amazon.nova-pro-v1:0", // Replace with your model ID
         contentType: "application/json",
         accept: "application/json",
         body: JSON.stringify(payload)
@@ -296,7 +297,7 @@ async function generateAltTextForLink(url) {
     1. Just give only alt text. do not give give any other word or phrases like "Here is the alt text" or "The alt text is" etc.
     2. The alt text should be clear and concise, providing a brief description of the link's destination or purpose.`;
     try {
-        return await invokeModel_alt_text_links(prompt, "amazon.nova-lite-v1:0");
+        return await invokeModel_alt_text_links(prompt, "us.amazon.nova-lite-v1:0");
     } catch (error) {
         console.error(`Error generating alt text for link: ${error}`);
         throw error;

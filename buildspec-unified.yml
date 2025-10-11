@@ -1,0 +1,166 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+      nodejs: 18
+    commands:
+      - echo "Installing dependencies..."
+      - npm install -g aws-cdk@latest
+      - pip install --upgrade pip
+      - echo "Deployment Type is $DEPLOYMENT_TYPE"
+      
+  pre_build:
+    commands:
+      - echo "Pre-build phase started on $(date)"
+      - echo "Deployment Type is $DEPLOYMENT_TYPE"
+      - aws --version
+      - cdk --version
+      - |
+        if [ "$DEPLOYMENT_TYPE" = "pdf2html" ]; then
+          echo "PDF-to-HTML pre-build steps..."
+          echo "Environment variables:"
+          echo "  ACCOUNT_ID=$ACCOUNT_ID"
+          echo "  REGION=$REGION"
+          echo "  BUCKET_NAME=$BUCKET_NAME"
+          echo "  BDA_PROJECT_ARN=$BDA_PROJECT_ARN"
+          docker --version
+          echo "Current directory contents:"
+          ls -la
+          echo "Navigating to pdf2html directory:"
+          cd pdf2html
+          ls -la
+          echo "Logging in to Amazon ECR..."
+          aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
+          cd ..
+        else
+          echo "PDF-to-PDF pre-build steps..."
+          echo "Installing Python dependencies..."
+          pip install -r requirements.txt
+          echo "Bootstrapping CDK environment with retry logic..."
+          for i in {1..3}; do
+            echo "CDK bootstrap attempt $i/3..."
+            if cdk bootstrap; then
+              echo "CDK bootstrap successful on attempt $i"
+              break
+            else
+              echo "CDK bootstrap failed on attempt $i"
+              if [ $i -eq 3 ]; then
+                echo "All CDK bootstrap attempts failed, continuing anyway..."
+              else
+                echo "Waiting 15 seconds before retry..."
+                sleep 15
+              fi
+            fi
+          done
+        fi
+      
+  build:
+    commands:
+      - echo "Build phase started on $(date)"
+      - |
+        if [ "$DEPLOYMENT_TYPE" = "pdf2html" ]; then
+          echo "Deploying PDF-to-HTML Remediation Solution..."
+          cd pdf2html
+          
+          # Create S3 bucket if it doesn't exist
+          if ! aws s3api head-bucket --bucket $BUCKET_NAME 2>/dev/null; then
+            echo "Creating S3 bucket $BUCKET_NAME..."
+            if [ "$REGION" = "us-east-1" ]; then
+              aws s3api create-bucket --bucket $BUCKET_NAME --region $REGION
+            else
+              aws s3api create-bucket --bucket $BUCKET_NAME --region $REGION --create-bucket-configuration LocationConstraint=$REGION
+            fi
+            aws s3api put-bucket-versioning --bucket $BUCKET_NAME --versioning-configuration Status=Enabled
+            
+            aws s3api put-object --bucket $BUCKET_NAME --key uploads/
+            aws s3api put-object --bucket $BUCKET_NAME --key output/
+            aws s3api put-object --bucket $BUCKET_NAME --key remediated/
+            echo "S3 bucket created successfully."
+          else
+            echo "S3 bucket $BUCKET_NAME already exists."
+          fi
+          
+          # Set CORS policy (always apply, whether bucket is new or existing)
+          echo "Setting CORS policy for bucket..."
+          aws s3api put-bucket-cors --bucket $BUCKET_NAME --cors-configuration '{
+            "CORSRules": [
+              {
+                "AllowedHeaders": ["*"],
+                "AllowedMethods": ["GET", "HEAD", "PUT", "POST", "DELETE"],
+                "AllowedOrigins": ["*"],
+                "ExposeHeaders": []
+              }
+            ]
+          }'
+          echo "CORS policy applied successfully."
+          
+          # Create ECR repository if it doesn't exist
+          REPO_NAME="pdf2html-lambda"
+          if ! aws ecr describe-repositories --repository-names $REPO_NAME --region $REGION 2>/dev/null; then
+            echo "Creating ECR repository $REPO_NAME..."
+            aws ecr create-repository --repository-name $REPO_NAME --region $REGION
+            echo "ECR repository created successfully."
+          else
+            echo "ECR repository $REPO_NAME already exists."
+          fi
+          
+          # Build and push Docker image
+          echo "Building Docker image..."
+          REPO_URI="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/pdf2html-lambda"
+          docker build --platform linux/amd64 --no-cache -t $REPO_URI:latest .
+          echo "Pushing Docker image to ECR..."
+          docker push $REPO_URI:latest
+          echo "Docker image pushed successfully."
+          
+          # Bootstrap CDK and deploy
+          echo "Bootstrapping CDK..."
+          cd cdk
+          npm install
+          
+          # Set CDK environment variables to ensure region consistency
+          export CDK_DEFAULT_ACCOUNT=$ACCOUNT_ID
+          export CDK_DEFAULT_REGION=$REGION
+          
+          npx cdk bootstrap aws://$ACCOUNT_ID/$REGION
+          echo "Deploying CDK stack..."
+          npx cdk deploy --app "node bin/app.js" --parameters BdaProjectArn=$BDA_PROJECT_ARN --parameters BucketName=$BUCKET_NAME --require-approval never
+          
+        elif [ "$DEPLOYMENT_TYPE" = "pdf2pdf" ]; then
+          echo "Deploying PDF-to-PDF Remediation Solution..."
+          echo "Deploying CDK stacks with retry logic..."
+          for i in {1..3}; do
+            echo "CDK deploy attempt $i/3..."
+            if cdk deploy --all --require-approval never; then
+              echo "CDK deploy successful on attempt $i"
+              break
+            else
+              echo "CDK deploy failed on attempt $i"
+              if [ $i -eq 3 ]; then
+                echo "All CDK deploy attempts failed"
+                exit 1
+              fi
+              echo "Waiting 30 seconds before retry..."
+              sleep 30
+            fi
+          done
+          
+        else
+          echo "Invalid DEPLOYMENT_TYPE: $DEPLOYMENT_TYPE"
+          echo "Valid options are: pdf2pdf, pdf2html"
+          exit 1
+        fi
+      
+  post_build:
+    commands:
+      - echo "Post-build phase completed on $(date)"
+      - |
+        if [ "$DEPLOYMENT_TYPE" = "pdf2html" ]; then
+          echo "PDF-to-HTML deployment completed successfully!"
+          echo "S3 Bucket: $BUCKET_NAME"
+          echo "BDA Project: $BDA_PROJECT_ARN"
+        else
+          echo "PDF-to-PDF deployment completed successfully!"
+          echo "Check the CloudWatch dashboard for monitoring."
+        fi

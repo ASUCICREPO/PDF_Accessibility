@@ -1,5 +1,14 @@
 # Release Notes
 
+## Version Update: V3  
+**Release Date:** TBD  
+
+### Key Features:
+- **Automated Deployment**: Streamlined deployment process with automated scripts
+- **PDF2HTML Functionality**: New capability to convert PDFs to accessible HTML format
+
+---
+
 ## Version Update: V2  
 **Release Date:** 14 Feb 2025  
 
