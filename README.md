@@ -40,14 +40,6 @@ We provide a **unified deployment script** that allows you to deploy either or b
    - Sign in to the AWS Management Console
    - In the top navigation bar, click the CloudShell icon (terminal symbol) next to the search bar
    - Wait for CloudShell to initialize (this may take a few moments on first use)
-3. **Enable AWS Bedrock Nova-Pro model** in your AWS account (For PDF to PDF remediation)  
-   **Enable AWS Bedrock Nova-Lite model** in your AWS account (For PDF to HTML remediation)
-   - [Request access to Amazon Bedrock](https://console.aws.amazon.com/bedrock/) through the AWS console if not already enabled
-   - Navigate to the AWS Bedrock console
-   - Click "Model access" in the left navigation pane
-   - Click "Manage model access"
-   - Find Nova-Pro/Nova-Lite in the list and select the checkbox
-   - Click "Save changes" and wait for access to be granted
 
 **Solution-Specific Requirements:**
 
