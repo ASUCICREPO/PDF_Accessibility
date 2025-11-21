@@ -419,7 +419,7 @@ EOF
     if [ "$DEPLOYMENT_TYPE" == "pdf2pdf" ]; then
         BUILD_IMAGE="aws/codebuild/amazonlinux-x86_64-standard:5.0"
         COMPUTE_TYPE="BUILD_GENERAL1_SMALL"
-        PRIVILEGED_MODE="false"
+        PRIVILEGED_MODE="true"
         SOURCE_VERSION="main"
         BUILDSPEC_FILE="buildspec-unified.yml"
     else
