@@ -1,5 +1,5 @@
-# 1. Start FROM the AWS Lambda Python 3.11 base image
-FROM public.ecr.aws/lambda/python:3.11
+# 1. Start FROM the AWS Lambda Python 3.12 base image
+FROM public.ecr.aws/lambda/python:3.12
 
 # 2. Set working directory inside the container
 #    Lambda will look here for your handler file by default.

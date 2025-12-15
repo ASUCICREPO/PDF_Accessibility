@@ -282,7 +282,7 @@ class PDFAccessibility(Stack):
         
         a11y_precheck = lambda_.Function(
             self,'accessibility_checker_before_remidiation',
-            runtime=lambda_.Runtime.PYTHON_3_10,
+            runtime=lambda_.Runtime.PYTHON_3_12,
             handler='main.lambda_handler',
             code=lambda_.Code.from_docker_build('lambda/accessibility_checker_before_remidiation'),
             timeout=Duration.seconds(900),
@@ -308,7 +308,7 @@ class PDFAccessibility(Stack):
 
         a11y_postcheck = lambda_.Function(
             self,'accessibility_checker_after_remidiation',
-            runtime=lambda_.Runtime.PYTHON_3_10,
+            runtime=lambda_.Runtime.PYTHON_3_12,
             handler='main.lambda_handler',
             code=lambda_.Code.from_docker_build('lambda/accessability_checker_after_remidiation'),
             timeout=Duration.seconds(900),
@@ -357,7 +357,7 @@ class PDFAccessibility(Stack):
         # Lambda Function
         split_pdf_lambda = lambda_.Function(
             self, 'SplitPDF',
-            runtime=lambda_.Runtime.PYTHON_3_10,
+            runtime=lambda_.Runtime.PYTHON_3_12,
             handler='main.lambda_handler',
             code=lambda_.Code.from_docker_build("lambda/split_pdf"),
             timeout=Duration.seconds(900),
