@@ -479,7 +479,7 @@ if status["status"] == "COMPLETED":
 
 ## Requirements
 
-- Python 3.11+
+- Python 3.12+
 - AWS credentials for Bedrock Data Automation and Bedrock models
 - Appropriate IAM permissions for S3 and BDA services
 
