@@ -1,4 +1,4 @@
-FROM public.ecr.aws/lambda/python:3.10.2024.06.14.14
+FROM public.ecr.aws/lambda/python:3.12
 
 COPY main.py /asset/
 COPY requirements.txt /tmp/

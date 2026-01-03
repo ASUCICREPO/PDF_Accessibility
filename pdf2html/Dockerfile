@@ -1,18 +1,18 @@
-# 1. Start FROM the AWS Lambda Python 3.11 base image
-FROM public.ecr.aws/lambda/python:3.11
+# 1. Start FROM the AWS Lambda Python 3.12 base image
+FROM public.ecr.aws/lambda/python:3.12
 
 # 2. Set working directory inside the container
 #    Lambda will look here for your handler file by default.
 WORKDIR /var/task
 
 # 3. Install AWS CLI for debugging purposes
-RUN yum -y update && \
-    yum -y install unzip gcc zlib-devel libjpeg-devel && \
+RUN microdnf -y update && \
+    microdnf -y install unzip gcc zlib-devel libjpeg-devel && \
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
     unzip awscliv2.zip && \
     ./aws/install && \
     rm -rf aws awscliv2.zip && \
-    yum clean all
+    microdnf clean all
 
 # 4. Copy your handler and requirement specs
 #    - lambda_function.py: our S3→/tmp entrypoint

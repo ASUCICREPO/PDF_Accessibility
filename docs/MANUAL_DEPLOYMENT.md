@@ -12,7 +12,7 @@ Before running the AWS CDK stack, ensure the following are installed and configu
 2. **Adobe API Access** - An enterprise-level contract or a trial account (For Testing) for Adobe's API is required.
    - [Adobe PDF Services API](https://acrobatservices.adobe.com/dc-integration-creation-app-cdn/main.html) to obtain API credentials.
    
-3. **Python (3.7 or later)**  
+3. **Python (3.12 or later)**  
    - [Download Python](https://www.python.org/downloads/)  
    - [Set up a virtual environment](https://docs.python.org/3/library/venv.html)  
      ```bash
