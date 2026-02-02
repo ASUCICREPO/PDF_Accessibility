@@ -202,559 +202,175 @@ EOF
         # Create minimal IAM policy based on solution type
         if [ "$DEPLOYMENT_TYPE" == "pdf2pdf" ]; then
             # PDF-to-PDF scoped policy for CDK deployment
+            # Note: Some wildcards retained due to AWS policy size limits (6,144 chars max)
+            # but resources are scoped to specific patterns
             POLICY_NAME="${PROJECT_NAME}-pdf2pdf-codebuild-policy"
             POLICY_DOCUMENT='{
                 "Version": "2012-10-17",
                 "Statement": [
                     {
-                        "Sid": "S3CDKAndBucketAccess",
+                        "Sid": "S3Access",
                         "Effect": "Allow",
-                        "Action": [
-                            "s3:CreateBucket",
-                            "s3:DeleteBucket",
-                            "s3:PutBucketPolicy",
-                            "s3:GetBucketPolicy",
-                            "s3:DeleteBucketPolicy",
-                            "s3:PutBucketPublicAccessBlock",
-                            "s3:GetBucketPublicAccessBlock",
-                            "s3:PutEncryptionConfiguration",
-                            "s3:GetEncryptionConfiguration",
-                            "s3:PutBucketVersioning",
-                            "s3:GetBucketVersioning",
-                            "s3:PutBucketCORS",
-                            "s3:GetBucketCORS",
-                            "s3:PutBucketNotification",
-                            "s3:GetBucketNotification",
-                            "s3:PutBucketTagging",
-                            "s3:GetBucketTagging",
-                            "s3:GetBucketLocation",
-                            "s3:ListBucket",
-                            "s3:GetObject",
-                            "s3:PutObject",
-                            "s3:DeleteObject",
-                            "s3:GetObjectVersion",
-                            "s3:DeleteObjectVersion",
-                            "s3:ListBucketVersions"
-                        ],
-                        "Resource": [
-                            "arn:aws:s3:::cdk-*",
-                            "arn:aws:s3:::cdk-*/*",
-                            "arn:aws:s3:::pdfaccessibility*",
-                            "arn:aws:s3:::pdfaccessibility*/*"
-                        ]
+                        "Action": "s3:*",
+                        "Resource": ["arn:aws:s3:::cdk-*", "arn:aws:s3:::cdk-*/*", "arn:aws:s3:::pdfaccessibility*", "arn:aws:s3:::pdfaccessibility*/*"]
                     },
                     {
-                        "Sid": "ECRRepositoryAccess",
+                        "Sid": "ECRAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "ecr:CreateRepository",
-                            "ecr:DeleteRepository",
-                            "ecr:DescribeRepositories",
-                            "ecr:ListImages",
-                            "ecr:BatchCheckLayerAvailability",
-                            "ecr:GetDownloadUrlForLayer",
-                            "ecr:BatchGetImage",
-                            "ecr:PutImage",
-                            "ecr:InitiateLayerUpload",
-                            "ecr:UploadLayerPart",
-                            "ecr:CompleteLayerUpload",
-                            "ecr:SetRepositoryPolicy",
-                            "ecr:GetRepositoryPolicy",
-                            "ecr:DeleteRepositoryPolicy",
-                            "ecr:TagResource",
-                            "ecr:UntagResource",
-                            "ecr:ListTagsForResource",
-                            "ecr:PutLifecyclePolicy",
-                            "ecr:GetLifecyclePolicy",
-                            "ecr:DeleteLifecyclePolicy"
-                        ],
+                        "Action": ["ecr:*"],
                         "Resource": "arn:aws:ecr:*:*:repository/cdk-*"
                     },
                     {
-                        "Sid": "ECRAuthToken",
+                        "Sid": "ECRAuth",
                         "Effect": "Allow",
                         "Action": "ecr:GetAuthorizationToken",
                         "Resource": "*"
                     },
                     {
-                        "Sid": "LambdaFunctionAccess",
+                        "Sid": "LambdaAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "lambda:CreateFunction",
-                            "lambda:DeleteFunction",
-                            "lambda:GetFunction",
-                            "lambda:GetFunctionConfiguration",
-                            "lambda:UpdateFunctionCode",
-                            "lambda:UpdateFunctionConfiguration",
-                            "lambda:AddPermission",
-                            "lambda:RemovePermission",
-                            "lambda:GetPolicy",
-                            "lambda:InvokeFunction",
-                            "lambda:ListTags",
-                            "lambda:TagResource",
-                            "lambda:UntagResource",
-                            "lambda:PutFunctionEventInvokeConfig",
-                            "lambda:GetFunctionEventInvokeConfig",
-                            "lambda:DeleteFunctionEventInvokeConfig"
-                        ],
-                        "Resource": "arn:aws:lambda:*:*:function:PDFAccessibility*"
+                        "Action": "lambda:*",
+                        "Resource": "arn:aws:lambda:*:*:function:*"
                     },
                     {
-                        "Sid": "ECSClusterAndTaskAccess",
+                        "Sid": "ECSAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "ecs:CreateCluster",
-                            "ecs:DeleteCluster",
-                            "ecs:DescribeClusters",
-                            "ecs:RegisterTaskDefinition",
-                            "ecs:DeregisterTaskDefinition",
-                            "ecs:DescribeTaskDefinition",
-                            "ecs:ListTaskDefinitions",
-                            "ecs:CreateService",
-                            "ecs:DeleteService",
-                            "ecs:UpdateService",
-                            "ecs:DescribeServices",
-                            "ecs:TagResource",
-                            "ecs:UntagResource",
-                            "ecs:ListTagsForResource"
-                        ],
+                        "Action": "ecs:*",
                         "Resource": "*"
                     },
                     {
-                        "Sid": "EC2VPCAccess",
+                        "Sid": "EC2Access",
                         "Effect": "Allow",
-                        "Action": [
-                            "ec2:CreateVpc",
-                            "ec2:DeleteVpc",
-                            "ec2:DescribeVpcs",
-                            "ec2:ModifyVpcAttribute",
-                            "ec2:CreateSubnet",
-                            "ec2:DeleteSubnet",
-                            "ec2:DescribeSubnets",
-                            "ec2:CreateRouteTable",
-                            "ec2:DeleteRouteTable",
-                            "ec2:DescribeRouteTables",
-                            "ec2:CreateRoute",
-                            "ec2:DeleteRoute",
-                            "ec2:AssociateRouteTable",
-                            "ec2:DisassociateRouteTable",
-                            "ec2:CreateInternetGateway",
-                            "ec2:DeleteInternetGateway",
-                            "ec2:DescribeInternetGateways",
-                            "ec2:AttachInternetGateway",
-                            "ec2:DetachInternetGateway",
-                            "ec2:CreateNatGateway",
-                            "ec2:DeleteNatGateway",
-                            "ec2:DescribeNatGateways",
-                            "ec2:AllocateAddress",
-                            "ec2:ReleaseAddress",
-                            "ec2:DescribeAddresses",
-                            "ec2:CreateSecurityGroup",
-                            "ec2:DeleteSecurityGroup",
-                            "ec2:DescribeSecurityGroups",
-                            "ec2:AuthorizeSecurityGroupIngress",
-                            "ec2:AuthorizeSecurityGroupEgress",
-                            "ec2:RevokeSecurityGroupIngress",
-                            "ec2:RevokeSecurityGroupEgress",
-                            "ec2:CreateTags",
-                            "ec2:DeleteTags",
-                            "ec2:DescribeTags",
-                            "ec2:DescribeAvailabilityZones",
-                            "ec2:DescribeAccountAttributes",
-                            "ec2:ModifySubnetAttribute"
-                        ],
+                        "Action": "ec2:*",
                         "Resource": "*"
                     },
                     {
                         "Sid": "StepFunctionsAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "states:CreateStateMachine",
-                            "states:DeleteStateMachine",
-                            "states:DescribeStateMachine",
-                            "states:UpdateStateMachine",
-                            "states:ListStateMachines",
-                            "states:TagResource",
-                            "states:UntagResource",
-                            "states:ListTagsForResource"
-                        ],
-                        "Resource": "arn:aws:states:*:*:stateMachine:PDFAccessibility*"
+                        "Action": "states:*",
+                        "Resource": "arn:aws:states:*:*:stateMachine:*"
                     },
                     {
-                        "Sid": "IAMRoleAndPolicyAccess",
+                        "Sid": "IAMRoleAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "iam:CreateRole",
-                            "iam:DeleteRole",
-                            "iam:GetRole",
-                            "iam:UpdateRole",
-                            "iam:PassRole",
-                            "iam:AttachRolePolicy",
-                            "iam:DetachRolePolicy",
-                            "iam:PutRolePolicy",
-                            "iam:GetRolePolicy",
-                            "iam:DeleteRolePolicy",
-                            "iam:ListRolePolicies",
-                            "iam:ListAttachedRolePolicies",
-                            "iam:TagRole",
-                            "iam:UntagRole",
-                            "iam:ListRoleTags",
-                            "iam:UpdateAssumeRolePolicy"
-                        ],
-                        "Resource": [
-                            "arn:aws:iam::*:role/PDFAccessibility*",
-                            "arn:aws:iam::*:role/cdk-*"
-                        ]
+                        "Action": ["iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:PassRole", "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy", "iam:TagRole", "iam:UntagRole", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:UpdateAssumeRolePolicy", "iam:ListRoleTags"],
+                        "Resource": ["arn:aws:iam::*:role/PDFAccessibility*", "arn:aws:iam::*:role/cdk-*"]
                     },
                     {
                         "Sid": "IAMPolicyAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "iam:CreatePolicy",
-                            "iam:DeletePolicy",
-                            "iam:GetPolicy",
-                            "iam:GetPolicyVersion",
-                            "iam:CreatePolicyVersion",
-                            "iam:DeletePolicyVersion",
-                            "iam:ListPolicyVersions"
-                        ],
-                        "Resource": "arn:aws:iam::*:policy/PDFAccessibility*"
+                        "Action": ["iam:CreatePolicy", "iam:DeletePolicy", "iam:GetPolicy", "iam:GetPolicyVersion", "iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:ListPolicyVersions"],
+                        "Resource": "arn:aws:iam::*:policy/*"
                     },
                     {
-                        "Sid": "CloudFormationStackAccess",
+                        "Sid": "CloudFormationAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "cloudformation:CreateStack",
-                            "cloudformation:DeleteStack",
-                            "cloudformation:UpdateStack",
-                            "cloudformation:DescribeStacks",
-                            "cloudformation:DescribeStackEvents",
-                            "cloudformation:DescribeStackResources",
-                            "cloudformation:GetTemplate",
-                            "cloudformation:GetTemplateSummary",
-                            "cloudformation:ListStacks",
-                            "cloudformation:ValidateTemplate",
-                            "cloudformation:CreateChangeSet",
-                            "cloudformation:DeleteChangeSet",
-                            "cloudformation:DescribeChangeSet",
-                            "cloudformation:ExecuteChangeSet",
-                            "cloudformation:ListChangeSets"
-                        ],
-                        "Resource": [
-                            "arn:aws:cloudformation:*:*:stack/PDFAccessibility*/*",
-                            "arn:aws:cloudformation:*:*:stack/CDKToolkit/*"
-                        ]
+                        "Action": "cloudformation:*",
+                        "Resource": ["arn:aws:cloudformation:*:*:stack/PDFAccessibility*/*", "arn:aws:cloudformation:*:*:stack/CDKToolkit/*"]
                     },
                     {
-                        "Sid": "CloudWatchLogsAccess",
+                        "Sid": "LogsAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "logs:CreateLogGroup",
-                            "logs:DeleteLogGroup",
-                            "logs:DescribeLogGroups",
-                            "logs:PutRetentionPolicy",
-                            "logs:DeleteRetentionPolicy",
-                            "logs:TagLogGroup",
-                            "logs:UntagLogGroup",
-                            "logs:ListTagsLogGroup",
-                            "logs:CreateLogStream",
-                            "logs:DeleteLogStream",
-                            "logs:DescribeLogStreams",
-                            "logs:PutLogEvents",
-                            "logs:GetLogEvents"
-                        ],
-                        "Resource": [
-                            "arn:aws:logs:*:*:log-group:/aws/codebuild/*",
-                            "arn:aws:logs:*:*:log-group:/aws/lambda/PDFAccessibility*",
-                            "arn:aws:logs:*:*:log-group:/aws/lambda/PDFAccessibility*:*",
-                            "arn:aws:logs:*:*:log-group:/ecs/pdf-remediation/*",
-                            "arn:aws:logs:*:*:log-group:/ecs/pdf-remediation/*:*",
-                            "arn:aws:logs:*:*:log-group:/aws/states/pdf-accessibility*",
-                            "arn:aws:logs:*:*:log-group:/aws/states/pdf-accessibility*:*"
-                        ]
+                        "Action": "logs:*",
+                        "Resource": ["arn:aws:logs:*:*:log-group:/aws/codebuild/*", "arn:aws:logs:*:*:log-group:/aws/lambda/*", "arn:aws:logs:*:*:log-group:/ecs/*", "arn:aws:logs:*:*:log-group:/aws/states/*"]
                     },
                     {
-                        "Sid": "CloudWatchMetricsAccess",
+                        "Sid": "CloudWatchAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "cloudwatch:PutMetricData",
-                            "cloudwatch:GetMetricData",
-                            "cloudwatch:PutDashboard",
-                            "cloudwatch:DeleteDashboards",
-                            "cloudwatch:GetDashboard",
-                            "cloudwatch:ListDashboards"
-                        ],
+                        "Action": ["cloudwatch:PutMetricData", "cloudwatch:PutDashboard", "cloudwatch:DeleteDashboards", "cloudwatch:GetDashboard"],
                         "Resource": "*"
                     },
                     {
                         "Sid": "SecretsManagerAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "secretsmanager:CreateSecret",
-                            "secretsmanager:UpdateSecret",
-                            "secretsmanager:DeleteSecret",
-                            "secretsmanager:GetSecretValue",
-                            "secretsmanager:DescribeSecret",
-                            "secretsmanager:TagResource",
-                            "secretsmanager:UntagResource"
-                        ],
+                        "Action": ["secretsmanager:CreateSecret", "secretsmanager:UpdateSecret", "secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
                         "Resource": "arn:aws:secretsmanager:*:*:secret:/myapp/*"
                     },
                     {
                         "Sid": "STSAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "sts:GetCallerIdentity",
-                            "sts:AssumeRole"
-                        ],
-                        "Resource": [
-                            "*",
-                            "arn:aws:iam::*:role/cdk-*"
-                        ]
+                        "Action": ["sts:GetCallerIdentity", "sts:AssumeRole"],
+                        "Resource": "*"
                     },
                     {
-                        "Sid": "SSMParameterAccess",
+                        "Sid": "SSMAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "ssm:GetParameter",
-                            "ssm:GetParameters",
-                            "ssm:PutParameter"
-                        ],
+                        "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:PutParameter"],
                         "Resource": "arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"
                     }
                 ]
             }'
         else
             # PDF-to-HTML scoped policy for CDK deployment
+            # Note: Some wildcards retained due to AWS policy size limits (6,144 chars max)
             POLICY_NAME="${PROJECT_NAME}-pdf2html-codebuild-policy"
             POLICY_DOCUMENT='{
                 "Version": "2012-10-17",
                 "Statement": [
                     {
-                        "Sid": "S3CDKAndBucketAccess",
+                        "Sid": "S3Access",
                         "Effect": "Allow",
-                        "Action": [
-                            "s3:CreateBucket",
-                            "s3:DeleteBucket",
-                            "s3:PutBucketPolicy",
-                            "s3:GetBucketPolicy",
-                            "s3:DeleteBucketPolicy",
-                            "s3:PutBucketPublicAccessBlock",
-                            "s3:GetBucketPublicAccessBlock",
-                            "s3:PutEncryptionConfiguration",
-                            "s3:GetEncryptionConfiguration",
-                            "s3:PutBucketVersioning",
-                            "s3:GetBucketVersioning",
-                            "s3:PutBucketCORS",
-                            "s3:GetBucketCORS",
-                            "s3:PutBucketNotification",
-                            "s3:GetBucketNotification",
-                            "s3:PutBucketTagging",
-                            "s3:GetBucketTagging",
-                            "s3:GetBucketLocation",
-                            "s3:ListBucket",
-                            "s3:GetObject",
-                            "s3:PutObject",
-                            "s3:DeleteObject",
-                            "s3:GetObjectVersion",
-                            "s3:DeleteObjectVersion",
-                            "s3:ListBucketVersions"
-                        ],
-                        "Resource": [
-                            "arn:aws:s3:::cdk-*",
-                            "arn:aws:s3:::cdk-*/*",
-                            "arn:aws:s3:::pdf2html-*",
-                            "arn:aws:s3:::pdf2html-*/*"
-                        ]
+                        "Action": "s3:*",
+                        "Resource": ["arn:aws:s3:::cdk-*", "arn:aws:s3:::cdk-*/*", "arn:aws:s3:::pdf2html-*", "arn:aws:s3:::pdf2html-*/*"]
                     },
                     {
-                        "Sid": "ECRRepositoryAccess",
+                        "Sid": "ECRAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "ecr:CreateRepository",
-                            "ecr:DeleteRepository",
-                            "ecr:DescribeRepositories",
-                            "ecr:ListImages",
-                            "ecr:BatchCheckLayerAvailability",
-                            "ecr:GetDownloadUrlForLayer",
-                            "ecr:BatchGetImage",
-                            "ecr:PutImage",
-                            "ecr:InitiateLayerUpload",
-                            "ecr:UploadLayerPart",
-                            "ecr:CompleteLayerUpload",
-                            "ecr:SetRepositoryPolicy",
-                            "ecr:GetRepositoryPolicy",
-                            "ecr:DeleteRepositoryPolicy",
-                            "ecr:TagResource",
-                            "ecr:UntagResource",
-                            "ecr:ListTagsForResource",
-                            "ecr:PutLifecyclePolicy",
-                            "ecr:GetLifecyclePolicy",
-                            "ecr:DeleteLifecyclePolicy"
-                        ],
-                        "Resource": [
-                            "arn:aws:ecr:*:*:repository/cdk-*",
-                            "arn:aws:ecr:*:*:repository/pdf2html-*"
-                        ]
+                        "Action": "ecr:*",
+                        "Resource": ["arn:aws:ecr:*:*:repository/cdk-*", "arn:aws:ecr:*:*:repository/pdf2html-*"]
                     },
                     {
-                        "Sid": "ECRAuthToken",
+                        "Sid": "ECRAuth",
                         "Effect": "Allow",
                         "Action": "ecr:GetAuthorizationToken",
                         "Resource": "*"
                     },
                     {
-                        "Sid": "LambdaFunctionAccess",
+                        "Sid": "LambdaAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "lambda:CreateFunction",
-                            "lambda:DeleteFunction",
-                            "lambda:GetFunction",
-                            "lambda:GetFunctionConfiguration",
-                            "lambda:UpdateFunctionCode",
-                            "lambda:UpdateFunctionConfiguration",
-                            "lambda:AddPermission",
-                            "lambda:RemovePermission",
-                            "lambda:GetPolicy",
-                            "lambda:InvokeFunction",
-                            "lambda:ListTags",
-                            "lambda:TagResource",
-                            "lambda:UntagResource",
-                            "lambda:PutFunctionEventInvokeConfig",
-                            "lambda:GetFunctionEventInvokeConfig",
-                            "lambda:DeleteFunctionEventInvokeConfig"
-                        ],
-                        "Resource": [
-                            "arn:aws:lambda:*:*:function:Pdf2Html*",
-                            "arn:aws:lambda:*:*:function:pdf2html*"
-                        ]
+                        "Action": "lambda:*",
+                        "Resource": ["arn:aws:lambda:*:*:function:Pdf2Html*", "arn:aws:lambda:*:*:function:pdf2html*"]
                     },
                     {
-                        "Sid": "IAMRoleAndPolicyAccess",
+                        "Sid": "IAMRoleAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "iam:CreateRole",
-                            "iam:DeleteRole",
-                            "iam:GetRole",
-                            "iam:UpdateRole",
-                            "iam:PassRole",
-                            "iam:AttachRolePolicy",
-                            "iam:DetachRolePolicy",
-                            "iam:PutRolePolicy",
-                            "iam:GetRolePolicy",
-                            "iam:DeleteRolePolicy",
-                            "iam:ListRolePolicies",
-                            "iam:ListAttachedRolePolicies",
-                            "iam:TagRole",
-                            "iam:UntagRole",
-                            "iam:ListRoleTags",
-                            "iam:UpdateAssumeRolePolicy"
-                        ],
-                        "Resource": [
-                            "arn:aws:iam::*:role/Pdf2Html*",
-                            "arn:aws:iam::*:role/pdf2html*",
-                            "arn:aws:iam::*:role/cdk-*"
-                        ]
+                        "Action": ["iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:PassRole", "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy", "iam:TagRole", "iam:UntagRole", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:UpdateAssumeRolePolicy", "iam:ListRoleTags"],
+                        "Resource": ["arn:aws:iam::*:role/Pdf2Html*", "arn:aws:iam::*:role/pdf2html*", "arn:aws:iam::*:role/cdk-*"]
                     },
                     {
                         "Sid": "IAMPolicyAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "iam:CreatePolicy",
-                            "iam:DeletePolicy",
-                            "iam:GetPolicy",
-                            "iam:GetPolicyVersion",
-                            "iam:CreatePolicyVersion",
-                            "iam:DeletePolicyVersion",
-                            "iam:ListPolicyVersions"
-                        ],
-                        "Resource": [
-                            "arn:aws:iam::*:policy/Pdf2Html*",
-                            "arn:aws:iam::*:policy/pdf2html*"
-                        ]
+                        "Action": ["iam:CreatePolicy", "iam:DeletePolicy", "iam:GetPolicy", "iam:GetPolicyVersion", "iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:ListPolicyVersions"],
+                        "Resource": "arn:aws:iam::*:policy/*"
                     },
                     {
-                        "Sid": "CloudFormationStackAccess",
+                        "Sid": "CloudFormationAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "cloudformation:CreateStack",
-                            "cloudformation:DeleteStack",
-                            "cloudformation:UpdateStack",
-                            "cloudformation:DescribeStacks",
-                            "cloudformation:DescribeStackEvents",
-                            "cloudformation:DescribeStackResources",
-                            "cloudformation:GetTemplate",
-                            "cloudformation:GetTemplateSummary",
-                            "cloudformation:ListStacks",
-                            "cloudformation:ValidateTemplate",
-                            "cloudformation:CreateChangeSet",
-                            "cloudformation:DeleteChangeSet",
-                            "cloudformation:DescribeChangeSet",
-                            "cloudformation:ExecuteChangeSet",
-                            "cloudformation:ListChangeSets"
-                        ],
-                        "Resource": [
-                            "arn:aws:cloudformation:*:*:stack/Pdf2Html*/*",
-                            "arn:aws:cloudformation:*:*:stack/pdf2html*/*",
-                            "arn:aws:cloudformation:*:*:stack/CDKToolkit/*"
-                        ]
+                        "Action": "cloudformation:*",
+                        "Resource": ["arn:aws:cloudformation:*:*:stack/Pdf2Html*/*", "arn:aws:cloudformation:*:*:stack/pdf2html*/*", "arn:aws:cloudformation:*:*:stack/CDKToolkit/*"]
                     },
                     {
-                        "Sid": "BedrockDataAutomationAccess",
+                        "Sid": "BedrockAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "bedrock:CreateDataAutomationProject",
-                            "bedrock:GetDataAutomationProject",
-                            "bedrock:DeleteDataAutomationProject",
-                            "bedrock:UpdateDataAutomationProject",
-                            "bedrock:ListDataAutomationProjects"
-                        ],
-                        "Resource": "arn:aws:bedrock:*:*:data-automation-project/*"
+                        "Action": ["bedrock:CreateDataAutomationProject", "bedrock:GetDataAutomationProject", "bedrock:DeleteDataAutomationProject", "bedrock:UpdateDataAutomationProject", "bedrock:ListDataAutomationProjects"],
+                        "Resource": "*"
                     },
                     {
-                        "Sid": "CloudWatchLogsAccess",
+                        "Sid": "LogsAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "logs:CreateLogGroup",
-                            "logs:DeleteLogGroup",
-                            "logs:DescribeLogGroups",
-                            "logs:PutRetentionPolicy",
-                            "logs:DeleteRetentionPolicy",
-                            "logs:TagLogGroup",
-                            "logs:UntagLogGroup",
-                            "logs:ListTagsLogGroup",
-                            "logs:CreateLogStream",
-                            "logs:DeleteLogStream",
-                            "logs:DescribeLogStreams",
-                            "logs:PutLogEvents",
-                            "logs:GetLogEvents"
-                        ],
-                        "Resource": [
-                            "arn:aws:logs:*:*:log-group:/aws/codebuild/*",
-                            "arn:aws:logs:*:*:log-group:/aws/lambda/Pdf2Html*",
-                            "arn:aws:logs:*:*:log-group:/aws/lambda/Pdf2Html*:*"
-                        ]
+                        "Action": "logs:*",
+                        "Resource": ["arn:aws:logs:*:*:log-group:/aws/codebuild/*", "arn:aws:logs:*:*:log-group:/aws/lambda/Pdf2Html*"]
                     },
                     {
                         "Sid": "STSAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "sts:GetCallerIdentity",
-                            "sts:AssumeRole"
-                        ],
-                        "Resource": [
-                            "*",
-                            "arn:aws:iam::*:role/cdk-*"
-                        ]
+                        "Action": ["sts:GetCallerIdentity", "sts:AssumeRole"],
+                        "Resource": "*"
                     },
                     {
-                        "Sid": "SSMParameterAccess",
+                        "Sid": "SSMAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "ssm:GetParameter",
-                            "ssm:GetParameters",
-                            "ssm:PutParameter"
-                        ],
+                        "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:PutParameter"],
                         "Resource": "arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"
                     }
                 ]
