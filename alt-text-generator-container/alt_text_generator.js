@@ -415,7 +415,8 @@ async function modifyPDF(zipped, bucketName, inputKey, outputKey, filebasename) 
         fs_1.unlinkSync(modifiedPdfPath);
 
     } catch (err) {
-        console.error(`Filename: ${filebasename} | Error processing PDF: ${err}`);
+        logger.error(`Filename: ${filebasename} | Error processing PDF: ${err}`);
+        throw err; // Re-throw to stop the container
     }
 }
 
@@ -485,7 +486,12 @@ async function startProcess() {
         // logger.info(`Filename: ${filebasename} | Split Lines: ${splitLines}`);
     
         let combinedResults = {};
+        let successCount = 0;
+        let failureCount = 0;
+        
         logger.info(`Filename: ${filebasename} | imageObjects: ${imageObjects}`);
+        logger.info(`Filename: ${filebasename} | Total images to process: ${imageObjects.length}`);
+        
         for (const imageObject of imageObjects) {
             try {
                 const getObjectParams = {
@@ -512,11 +518,24 @@ async function startProcess() {
                 const response = await generateAltText(imageObject, image_Buffer);
                 logger.info(`Filename: ${filebasename} | Response:${response}`);
                 Object.assign(combinedResults, JSON.parse(response));
+                successCount++;
+                logger.info(`Filename: ${filebasename} | Alt text generation succeeded for image ${imageObject.id} (${successCount} succeeded, ${failureCount} failed)`);
             } catch (error) {
-                logger.info(`Filename: ${filebasename} | Error: ${error}`);
+                failureCount++;
+                logger.error(`Filename: ${filebasename} | Alt text generation failed for image ${imageObject.id}: ${error.message || error}`);
+                logger.info(`Filename: ${filebasename} | Progress: ${successCount} succeeded, ${failureCount} failed`);
             }
             await sleep(5000);
         }
+
+        // Check if we have any images and if all of them failed
+        if (imageObjects.length > 0 && successCount === 0) {
+            logger.error(`Filename: ${filebasename} | All ${failureCount} alt text generation requests failed - likely due to throttling or Bedrock API issues`);
+            logger.error(`File: ${filebasename}, Status: Failed in second ECS task - All Bedrock requests failed`);
+            process.exit(1);
+        }
+        
+        logger.info(`Filename: ${filebasename} | Alt text generation complete: ${successCount} succeeded, ${failureCount} failed out of ${imageObjects.length} images`);
 
         let defaultText = "No text available"; 
 
