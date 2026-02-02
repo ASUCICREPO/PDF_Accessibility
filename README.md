@@ -89,24 +89,20 @@ After successful deployment, the script provides specific testing instructions f
    - In the AWS S3 Console, find the bucket starting with `pdfaccessibility-`
    - This bucket was automatically created during deployment
 
-2. **Create the Input Folder**
-
-   - Create a folder named `pdf/` in the root of the bucket
-   - This is where you'll upload PDFs for processing
-
-3. **Upload Your PDF Files**
+2. **Upload Your PDF Files**
 
    - Upload any PDF file(s) to the `pdf/` folder
+   - **Note**: The `pdf/` folder is automatically created when you upload files - no manual folder creation needed
    - **Bulk Processing**: You can upload multiple PDFs in the bucket for batch remediation
    - The process automatically triggers when files are uploaded
 
-4. **Monitor Processing**
+3. **Monitor Processing**
 
    - **Temporary Files**: A `temp/` folder will be created containing intermediate processing files
    - **Final Results**: A `result/` folder will be created with your accessibility-compliant PDF files
    - Use the CloudWatch dashboard to monitor processing progress
 
-5. **Download Results**
+4. **Download Results**
    - Navigate to the `result/` folder to access your remediated PDFs
    - Files maintain their original names with "COMPLIANT" prefix after accessibility improvements applied
 
