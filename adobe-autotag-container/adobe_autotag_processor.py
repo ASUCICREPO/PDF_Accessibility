@@ -125,8 +125,15 @@ def get_secret(basefilename):
     """
     Retrieves client credentials from AWS Secrets Manager.
     
+    Args:
+        basefilename (str): The base filename for logging purposes.
+    
     Returns:
         tuple: (client_id, client_secret)
+        
+    Raises:
+        ClientError: If there's an error retrieving the secret.
+        KeyError: If the secret structure is invalid.
     """
     secret_name = "/myapp/client_credentials"
     region_name = os.environ.get('AWS_REGION', os.environ.get('AWS_DEFAULT_REGION', os.environ.get('CDK_DEFAULT_REGION')))
@@ -143,8 +150,8 @@ def get_secret(basefilename):
             SecretId=secret_name
         )
     except ClientError as e:
-        logging.info(f'Filename : {basefilename} | Error: {e}')
-        
+        logging.error(f'Filename : {basefilename} | Failed to retrieve secret: {e}')
+        raise  # Re-raise to stop the container
 
     secret = get_secret_value_response['SecretString']
     secret_dict = json.loads(secret)
@@ -171,6 +178,19 @@ def add_viewer_preferences(pdf_path, filename):
     logger.info(f'Filename : {filename} | Viewer preferences added to the PDF')
 
 def autotag_pdf_with_options(filename, client_id, client_secret):
+    """
+    Auto-tags a PDF for accessibility using Adobe PDF Services.
+    
+    Args:
+        filename (str): The path to the PDF file.
+        client_id (str): Adobe API client ID.
+        client_secret (str): Adobe API client secret.
+        
+    Raises:
+        ServiceApiException: If Adobe API returns an error.
+        ServiceUsageException: If there's a usage-related error.
+        SdkException: If there's an SDK-related error.
+    """
     try:
         with open(filename, 'rb') as file:
             input_stream = file.read()
@@ -222,10 +242,26 @@ def autotag_pdf_with_options(filename, client_id, client_secret):
             file.write(stream_asset.get_input_stream())
         with open(output_file_path_report, "wb") as file:
             file.write(stream_asset_report.get_input_stream())
+        
+        logging.info(f'Filename : {filename} | Adobe Autotag completed successfully')
 
     except (ServiceApiException, ServiceUsageException, SdkException) as e:
-        logging.exception(f'Filename : {filename} | Exception encountered while executing operation: {e}')
+        logging.error(f'Filename : {filename} | Adobe Autotag API failed: {e}')
+        raise  # Re-raise to stop the container
 def extract_api(filename, client_id, client_secret):
+    """
+    Extracts text, tables, and figures from a PDF using Adobe PDF Services.
+    
+    Args:
+        filename (str): The path to the PDF file.
+        client_id (str): Adobe API client ID.
+        client_secret (str): Adobe API client secret.
+        
+    Raises:
+        ServiceApiException: If Adobe API returns an error.
+        ServiceUsageException: If there's a usage-related error.
+        SdkException: If there's an SDK-related error.
+    """
     try:
         with open(filename, 'rb') as file:
             input_stream = file.read()
@@ -267,9 +303,12 @@ def extract_api(filename, client_id, client_secret):
         output_file_path = f"output/ExtractTextInfoFromPDF/extract${filename}.zip"
         with open(output_file_path, "wb") as file:
             file.write(stream_asset.get_input_stream())
+        
+        logging.info(f'Filename : {filename} | Adobe Extract API completed successfully')
 
     except (ServiceApiException, ServiceUsageException, SdkException) as e:
-        logging.exception(f'Exception encountered while executing operation: {e}')
+        logging.error(f'Filename : {filename} | Adobe Extract API failed: {e}')
+        raise  # Re-raise to stop the container
 
 def unzip_file(filename,zip_path, extract_to):
     """
@@ -599,36 +638,52 @@ def main():
     """
     Main function that coordinates the downloading, processing, and uploading of PDF files and associated content.
     """
-
+    file_key = None
+    file_base_name = None
+    
     try:    
         bucket_name = os.getenv('S3_BUCKET_NAME')
-        file_key = os.getenv('S3_FILE_KEY').split('/')[2]
-        file_base_name = os.getenv('S3_FILE_KEY').split('/')[1]
+        s3_file_key = os.getenv('S3_FILE_KEY')
+        
+        if not bucket_name or not s3_file_key:
+            logging.error("Error: S3_BUCKET_NAME and S3_FILE_KEY environment variables are required.")
+            sys.exit(1)
+        
+        file_key = s3_file_key.split('/')[2]
+        file_base_name = s3_file_key.split('/')[1]
         logging.info(f'Filename : {file_key} | Bucket Name: {bucket_name}')
-        if not bucket_name or not file_key:
-            logging.info("Error: S3_BUCKET_NAME and S3_FILE_KEY environment variables are required.")
-            return
 
         # Define the local file path where the file will be saved
         local_file_path = os.path.basename(file_key)  # Save the file with its original name
         
         # Download the file from S3
-        download_file_from_s3(bucket_name,file_base_name, file_key, local_file_path)
+        logging.info(f'Filename : {file_key} | Downloading file from S3...')
+        download_file_from_s3(bucket_name, file_base_name, file_key, local_file_path)
 
         base_filename = os.path.basename(local_file_path)
         filename = "COMPLIANT_" + base_filename
 
+        # Get Adobe API credentials
+        logging.info(f'Filename : {file_key} | Retrieving Adobe API credentials...')
         client_id, client_secret = get_secret(base_filename)
 
+        # Add viewer preferences
+        logging.info(f'Filename : {file_key} | Adding viewer preferences...')
         add_viewer_preferences(local_file_path, filename)
 
+        # Run Adobe Autotag API
+        logging.info(f'Filename : {file_key} | Running Adobe Autotag API...')
         autotag_pdf_with_options(filename, client_id, client_secret)
 
+        # Run Adobe Extract API
+        logging.info(f'Filename : {file_key} | Running Adobe Extract API...')
         extract_api(filename, client_id, client_secret)
 
         extract_api_zip_path = f"output/ExtractTextInfoFromPDF/extract${filename}.zip"
         extract_to = f"output/zipfile/{filename}"
-        unzip_file(filename,extract_api_zip_path,extract_to)
+        
+        logging.info(f'Filename : {file_key} | Unzipping extracted content...')
+        unzip_file(filename, extract_api_zip_path, extract_to)
 
         with open(f"output/zipfile/{filename}/structuredData.json") as file:
             data = json.load(file)
@@ -636,11 +691,14 @@ def main():
         pdf_document = pymupdf.open(filename)
 
         # Add TOC entries
-        add_toc_to_pdf(filename,pdf_document,data)
+        logging.info(f'Filename : {file_key} | Adding TOC entries...')
+        add_toc_to_pdf(filename, pdf_document, data)
 
         pdf_document.saveIncr()
         pdf_document.close()
-        save_to_s3(filename, bucket_name, "output_autotag",file_base_name, file_key)
+        
+        logging.info(f'Filename : {file_key} | Uploading processed PDF to S3...')
+        save_to_s3(filename, bucket_name, "output_autotag", file_base_name, file_key)
 
         logging.info(f"PDF saved with updated metadata and TOC. File location: COMPLIANT_{file_key}")
 
@@ -649,12 +707,28 @@ def main():
         images_output_dir = "output/zipfile/images"
 
         s3_folder_autotag = f"temp/{file_base_name}/output_autotag"
-        extract_images_from_excel(filename,figure_path,autotag_report_path,images_output_dir,bucket_name,s3_folder_autotag,file_key)
         
-        logging.info(f'Filename : {file_key} | Processing completed for pdf file')
+        logging.info(f'Filename : {file_key} | Extracting and uploading images...')
+        extract_images_from_excel(filename, figure_path, autotag_report_path, images_output_dir, bucket_name, s3_folder_autotag, file_key)
+        
+        logging.info(f'Filename : {file_key} | Processing completed successfully')
+        logger.info(f"File: {file_base_name}, Status: Succeeded in First ECS task")
+        
+    except (ServiceApiException, ServiceUsageException, SdkException) as e:
+        logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - Adobe API Error")
+        logger.error(f"Filename : {file_key} | Adobe API Error: {e}")
+        sys.exit(1)
+    except ClientError as e:
+        logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - AWS Error")
+        logger.error(f"Filename : {file_key} | AWS Error: {e}")
+        sys.exit(1)
+    except FileNotFoundError as e:
+        logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - File Not Found")
+        logger.error(f"Filename : {file_key} | File Not Found Error: {e}")
+        sys.exit(1)
     except Exception as e:
-        logger.info(f"File: {file_base_name}, Status: Failed in First ECS task")
-        logger.info(f"Filename : {file_key} | Error: {e}")
+        logger.error(f"File: {file_base_name}, Status: Failed in First ECS task")
+        logger.error(f"Filename : {file_key} | Unexpected Error: {e}")
         sys.exit(1)
         
 if __name__ == "__main__":

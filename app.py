@@ -5,6 +5,7 @@ from aws_cdk import (
     aws_lambda as lambda_,
     aws_s3 as s3,
     aws_s3_notifications as s3n,
+    aws_s3_deployment as s3deploy,
     aws_iam as iam,
     aws_ec2 as ec2,
     aws_ecs as ecs,
@@ -33,6 +34,12 @@ class PDFAccessibility(Stack):
                               allowed_origins=["*"],
                               exposed_headers=[]
                           )])
+    
+        # Create pdf/ folder in the bucket
+        s3deploy.BucketDeployment(self, "CreatePdfFolder",
+            sources=[s3deploy.Source.data("pdf/.keep", "")],
+            destination_bucket=pdf_processing_bucket,
+        )
     
 
         adobe_autotag_image_asset = ecr_assets.DockerImageAsset(self, "AdobeAutotagImage",
