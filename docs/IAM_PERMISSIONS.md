@@ -1,6 +1,6 @@
 # IAM Permissions Required for PDF Accessibility Solutions
 
-This document outlines the specific IAM permissions required to deploy and operate each PDF accessibility solution.
+This document outlines the specific IAM permissions required to deploy and operate each PDF accessibility solution. All permissions follow the **principle of least privilege** with scoped resources.
 
 ## PDF-to-PDF Remediation Solution
 
@@ -17,155 +17,86 @@ This document outlines the specific IAM permissions required to deploy and opera
 - **AWS Secrets Manager** - Adobe API credentials storage
 - **Amazon CloudWatch** - Monitoring and logging
 - **AWS Systems Manager** - Parameter storage
+- **Amazon Comprehend** - Language detection
 
-### Detailed IAM Permissions
+### Runtime Permissions (ECS Task Role)
 
-#### S3 Permissions
+#### Bedrock Permissions (Scoped to specific models)
 ```json
 {
-    "Sid": "S3FullAccess",
+    "Sid": "BedrockInvokeModel",
     "Effect": "Allow",
-    "Action": ["s3:*"],
-    "Resource": "*"
+    "Action": ["bedrock:InvokeModel"],
+    "Resource": [
+        "arn:aws:bedrock:${Region}::foundation-model/us.amazon.nova-pro-v1:0",
+        "arn:aws:bedrock:${Region}::foundation-model/amazon.nova-pro-v1:0"
+    ]
 }
 ```
 
-#### ECR Permissions
+#### S3 Permissions (Scoped to processing bucket)
 ```json
 {
-    "Sid": "ECRFullAccess",
-    "Effect": "Allow",
-    "Action": ["ecr:*"],
-    "Resource": "*"
-}
-```
-
-#### Lambda Permissions
-```json
-{
-    "Sid": "LambdaFullAccess",
-    "Effect": "Allow",
-    "Action": ["lambda:*"],
-    "Resource": "*"
-}
-```
-
-#### ECS Permissions
-```json
-{
-    "Sid": "ECSFullAccess",
-    "Effect": "Allow",
-    "Action": ["ecs:*"],
-    "Resource": "*"
-}
-```
-
-#### EC2 Permissions
-```json
-{
-    "Sid": "EC2FullAccess",
-    "Effect": "Allow",
-    "Action": ["ec2:*"],
-    "Resource": "*"
-}
-```
-
-#### Step Functions Permissions
-```json
-{
-    "Sid": "StepFunctionsFullAccess",
-    "Effect": "Allow",
-    "Action": ["states:*"],
-    "Resource": "*"
-}
-```
-
-#### IAM Permissions
-```json
-{
-    "Sid": "IAMFullAccess",
-    "Effect": "Allow",
-    "Action": ["iam:*"],
-    "Resource": "*"
-}
-```
-
-#### CloudFormation Permissions
-```json
-{
-    "Sid": "CloudFormationFullAccess",
-    "Effect": "Allow",
-    "Action": ["cloudformation:*"],
-    "Resource": "*"
-}
-```
-
-#### Bedrock Permissions
-```json
-{
-    "Sid": "BedrockFullAccess",
+    "Sid": "S3BucketAccess",
     "Effect": "Allow",
     "Action": [
-        "bedrock:*",
-        "bedrock-data-automation:*",
-        "bedrock-data-automation-runtime:*"
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
     ],
-    "Resource": "*"
+    "Resource": [
+        "arn:aws:s3:::${BucketName}",
+        "arn:aws:s3:::${BucketName}/*"
+    ]
 }
 ```
 
-#### CloudWatch Permissions
+#### Comprehend Permissions
 ```json
 {
-    "Sid": "CloudWatchLogsFullAccess",
+    "Sid": "ComprehendLanguageDetection",
     "Effect": "Allow",
-    "Action": ["logs:*"],
+    "Action": ["comprehend:DetectDominantLanguage"],
     "Resource": "*"
-},
+}
+```
+> **Note:** Comprehend's `DetectDominantLanguage` action does not support resource-level permissions.
+
+#### Secrets Manager Permissions (Scoped to app secrets)
+```json
 {
-    "Sid": "CloudWatchFullAccess",
+    "Sid": "SecretsManagerAccess",
     "Effect": "Allow",
-    "Action": ["cloudwatch:*"],
-    "Resource": "*"
+    "Action": ["secretsmanager:GetSecretValue"],
+    "Resource": "arn:aws:secretsmanager:${Region}:${AccountId}:secret:/myapp/*"
 }
 ```
 
-#### Secrets Manager Permissions
+### Lambda Function Permissions
+
+#### Title Generator Lambda - Bedrock Access
 ```json
 {
-    "Sid": "SecretsManagerFullAccess",
+    "Sid": "BedrockInvokeModel",
     "Effect": "Allow",
-    "Action": ["secretsmanager:*"],
-    "Resource": "*"
+    "Action": ["bedrock:InvokeModel"],
+    "Resource": [
+        "arn:aws:bedrock:${Region}::foundation-model/us.amazon.nova-pro-v1:0",
+        "arn:aws:bedrock:${Region}::foundation-model/amazon.nova-pro-v1:0"
+    ]
 }
 ```
 
-#### STS Permissions
+#### CloudWatch Metrics (All Lambdas)
 ```json
 {
-    "Sid": "STSAccess",
+    "Sid": "CloudWatchMetrics",
     "Effect": "Allow",
-    "Action": [
-        "sts:GetCallerIdentity",
-        "sts:AssumeRole"
-    ],
+    "Action": ["cloudwatch:PutMetricData"],
     "Resource": "*"
 }
 ```
-
-#### Systems Manager Permissions
-```json
-{
-    "Sid": "SSMParameterAccess",
-    "Effect": "Allow",
-    "Action": [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:PutParameter"
-    ],
-    "Resource": "*"
-}
-```
+> **Note:** CloudWatch `PutMetricData` does not support resource-level permissions.
 
 ---
 
@@ -181,142 +112,214 @@ This document outlines the specific IAM permissions required to deploy and opera
 - **Amazon CloudWatch** - Monitoring and logging
 - **AWS Systems Manager** - Parameter storage
 
-### Detailed IAM Permissions
+### Runtime Permissions (Lambda Role)
 
-#### S3 Permissions
+#### S3 Permissions (Scoped to processing bucket)
 ```json
 {
-    "Sid": "S3FullAccess",
-    "Effect": "Allow",
-    "Action": ["s3:*"],
-    "Resource": "*"
-}
-```
-
-#### ECR Permissions
-```json
-{
-    "Sid": "ECRFullAccess",
-    "Effect": "Allow",
-    "Action": ["ecr:*"],
-    "Resource": "*"
-}
-```
-
-#### Lambda Permissions
-```json
-{
-    "Sid": "LambdaFullAccess",
-    "Effect": "Allow",
-    "Action": ["lambda:*"],
-    "Resource": "*"
-}
-```
-
-#### IAM Permissions
-```json
-{
-    "Sid": "IAMFullAccess",
-    "Effect": "Allow",
-    "Action": ["iam:*"],
-    "Resource": "*"
-}
-```
-
-#### CloudFormation Permissions
-```json
-{
-    "Sid": "CloudFormationFullAccess",
-    "Effect": "Allow",
-    "Action": ["cloudformation:*"],
-    "Resource": "*"
-}
-```
-
-#### Bedrock Permissions
-```json
-{
-    "Sid": "BedrockFullAccess",
+    "Sid": "S3BucketAccess",
     "Effect": "Allow",
     "Action": [
-        "bedrock:*",
-        "bedrock-data-automation:*",
-        "bedrock-data-automation-runtime:*"
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:ListBucket",
+        "s3:DeleteObject",
+        "s3:DeleteObjects",
+        "s3:ListObjects",
+        "s3:ListObjectsV2",
+        "s3:GetBucketLocation",
+        "s3:GetObjectVersion",
+        "s3:GetBucketPolicy"
     ],
-    "Resource": "*"
+    "Resource": [
+        "arn:aws:s3:::${BucketName}",
+        "arn:aws:s3:::${BucketName}/*"
+    ]
 }
 ```
 
-#### CloudWatch Logs Permissions
+#### Bedrock Model Invocation (Scoped to specific models)
 ```json
 {
-    "Sid": "CloudWatchLogsFullAccess",
-    "Effect": "Allow",
-    "Action": ["logs:*"],
-    "Resource": "*"
-}
-```
-
-#### STS Permissions
-```json
-{
-    "Sid": "STSAccess",
-    "Effect": "Allow",
-    "Action": [
-        "sts:GetCallerIdentity",
-        "sts:AssumeRole"
-    ],
-    "Resource": "*"
-}
-```
-
-#### Systems Manager Permissions
-```json
-{
-    "Sid": "SSMParameterAccess",
+    "Sid": "BedrockModelInvocation",
     "Effect": "Allow",
     "Action": [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:PutParameter"
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
     ],
-    "Resource": "*"
+    "Resource": [
+        "arn:aws:bedrock:${Region}::foundation-model/us.amazon.nova-lite-v1:0",
+        "arn:aws:bedrock:${Region}::foundation-model/amazon.nova-lite-v1:0",
+        "arn:aws:bedrock:${Region}::foundation-model/us.amazon.nova-pro-v1:0",
+        "arn:aws:bedrock:${Region}::foundation-model/amazon.nova-pro-v1:0"
+    ]
+}
+```
+
+#### Bedrock Data Automation (Scoped to project)
+```json
+{
+    "Sid": "BedrockDataAutomation",
+    "Effect": "Allow",
+    "Action": [
+        "bedrock:InvokeDataAutomationAsync",
+        "bedrock:GetDataAutomationStatus",
+        "bedrock:GetDataAutomationProject"
+    ],
+    "Resource": [
+        "${BdaProjectArn}",
+        "arn:aws:bedrock:${Region}:${AccountId}:data-automation-invocation/*",
+        "arn:aws:bedrock:${Region}:${AccountId}:data-automation-profile/*"
+    ]
+}
+```
+
+#### CloudWatch Logs (Scoped to Lambda log group)
+```json
+{
+    "Sid": "CloudWatchLogs",
+    "Effect": "Allow",
+    "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+    ],
+    "Resource": "arn:aws:logs:${Region}:${AccountId}:log-group:/aws/lambda/Pdf2HtmlPipeline:*"
 }
 ```
 
 ---
 
-## Runtime Permissions
+## Deployment Permissions (CodeBuild Role)
 
-### PDF-to-PDF Solution Runtime Roles
+The CodeBuild role requires permissions to deploy CDK stacks. These are scoped to specific resource patterns.
 
-#### ECS Task Role Permissions
-- **Bedrock**: Full access for AI model inference
-- **S3**: Read/write access to processing bucket
-- **Secrets Manager**: Read access to Adobe API credentials
+### PDF-to-PDF Deployment
 
-#### Lambda Function Permissions
-- **S3**: Read/write access to processing bucket
-- **Step Functions**: Start execution permissions
-- **Bedrock**: Full access for AI model inference
-- **CloudWatch**: Metrics and logging permissions
-- **Secrets Manager**: Read access to Adobe API credentials
+#### S3 (CDK and Application Buckets)
+```json
+{
+    "Sid": "S3CDKAndBucketAccess",
+    "Effect": "Allow",
+    "Action": [
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:PutBucketPolicy",
+        "s3:GetBucketPolicy",
+        "s3:DeleteBucketPolicy",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:PutEncryptionConfiguration",
+        "s3:GetEncryptionConfiguration",
+        "s3:PutBucketVersioning",
+        "s3:GetBucketVersioning",
+        "s3:PutBucketCORS",
+        "s3:GetBucketCORS",
+        "s3:PutBucketNotification",
+        "s3:GetBucketNotification",
+        "s3:PutBucketTagging",
+        "s3:GetBucketTagging",
+        "s3:GetBucketLocation",
+        "s3:ListBucket",
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:GetObjectVersion",
+        "s3:DeleteObjectVersion",
+        "s3:ListBucketVersions"
+    ],
+    "Resource": [
+        "arn:aws:s3:::cdk-*",
+        "arn:aws:s3:::cdk-*/*",
+        "arn:aws:s3:::pdfaccessibility*",
+        "arn:aws:s3:::pdfaccessibility*/*"
+    ]
+}
+```
 
-### PDF-to-HTML Solution Runtime Roles
+#### IAM (Scoped to stack-specific roles)
+```json
+{
+    "Sid": "IAMRoleAndPolicyAccess",
+    "Effect": "Allow",
+    "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:UpdateRole",
+        "iam:PassRole",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:ListRoleTags",
+        "iam:UpdateAssumeRolePolicy"
+    ],
+    "Resource": [
+        "arn:aws:iam::*:role/PDFAccessibility*",
+        "arn:aws:iam::*:role/cdk-*"
+    ]
+}
+```
 
-#### Lambda Function Permissions
-- **S3**: Read/write access to processing bucket
-- **Bedrock**: Full access including Data Automation
-- **CloudWatch**: Logging permissions
+#### CloudFormation (Scoped to stack names)
+```json
+{
+    "Sid": "CloudFormationStackAccess",
+    "Effect": "Allow",
+    "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:GetTemplate",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:ListStacks",
+        "cloudformation:ValidateTemplate",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:ListChangeSets"
+    ],
+    "Resource": [
+        "arn:aws:cloudformation:*:*:stack/PDFAccessibility*/*",
+        "arn:aws:cloudformation:*:*:stack/CDKToolkit/*"
+    ]
+}
+```
 
 ---
 
 ## Security Considerations
 
+### Principle of Least Privilege
+All IAM policies in this solution follow the principle of least privilege:
+- **Actions** are limited to only those required for the specific operation
+- **Resources** are scoped to specific ARN patterns where possible
+- **Wildcards** are only used where AWS does not support resource-level permissions
+
+### Services Without Resource-Level Permissions
+The following actions require `Resource: "*"` because AWS does not support resource-level permissions:
+- `cloudwatch:PutMetricData`
+- `comprehend:DetectDominantLanguage`
+- `ecr:GetAuthorizationToken`
+- `sts:GetCallerIdentity`
+- EC2 VPC-related actions (describe operations)
+- ECS cluster and task definition operations
+
 ### Sensitive Data Protection
-- Adobe API credentials are stored securely in AWS Secrets Manager
-- All S3 buckets use server-side encryption
+- Adobe API credentials are stored securely in AWS Secrets Manager at `/myapp/client_credentials`
+- All S3 buckets use server-side encryption (SSE-S3)
 - VPC configuration isolates ECS tasks in private subnets (PDF-to-PDF solution)
+- IAM roles are scoped to specific resource patterns
 
 ### Monitoring and Auditing
 - CloudWatch logs capture all function executions
@@ -329,16 +332,22 @@ This document outlines the specific IAM permissions required to deploy and opera
 
 ### Common Permission Errors
 
-1. **CDK Bootstrap Failures**: Ensure CloudFormation and S3 permissions
-2. **ECR Push Failures**: Verify ECR repository permissions and Docker login
+1. **CDK Bootstrap Failures**: Ensure CloudFormation and S3 permissions for `cdk-*` resources
+2. **ECR Push Failures**: Verify ECR repository permissions and `ecr:GetAuthorizationToken`
 3. **Lambda Deployment Failures**: Check Lambda and IAM role creation permissions
 4. **Step Function Execution Failures**: Verify Step Functions and ECS permissions
-5. **Bedrock Access Denied**: Ensure Bedrock model access is enabled in the console
+5. **Bedrock Access Denied**: Ensure Bedrock model access is enabled in the console and IAM policy includes the correct model ARNs
 
 ### Permission Validation
-Before deployment, verify your AWS credentials have the required permissions by running:
+Before deployment, verify your AWS credentials have the required permissions:
 ```bash
 aws sts get-caller-identity
 aws iam get-user
 aws bedrock list-foundation-models --region your-region
 ```
+
+### Model ARN Formats
+When scoping Bedrock permissions, use the correct ARN format:
+- Foundation models: `arn:aws:bedrock:${Region}::foundation-model/${ModelId}`
+- Data automation projects: `arn:aws:bedrock:${Region}:${AccountId}:data-automation-project/${ProjectId}`
+- Data automation invocations: `arn:aws:bedrock:${Region}:${AccountId}:data-automation-invocation/${JobId}`

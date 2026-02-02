@@ -84,21 +84,42 @@ class PDFAccessibility(Stack):
             assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy"),
-                iam.ManagedPolicy.from_aws_managed_policy_name("SecretsManagerReadWrite")  # Add this line
             ]
         )
+        
+        # Bedrock permissions - scoped to specific model used for alt-text generation
         ecs_task_role.add_to_policy(iam.PolicyStatement(
-            actions=["bedrock:*"],  # Adjust based on the specific Bedrock actions required
-            resources=["*"],
+            actions=["bedrock:InvokeModel"],
+            resources=[
+                f"arn:aws:bedrock:{region}::foundation-model/us.amazon.nova-pro-v1:0",
+                f"arn:aws:bedrock:{region}::foundation-model/amazon.nova-pro-v1:0",
+            ],
         ))
+        
+        # S3 permissions - scoped to the processing bucket only
         ecs_task_role.add_to_policy(iam.PolicyStatement(
-            actions=["s3:*"],  # This gives access to all S3 actions
-            resources=["*"],   # This applies the actions to all resources
+            actions=[
+                "s3:GetObject",
+                "s3:PutObject",
+                "s3:DeleteObject",
+            ],
+            resources=[
+                pdf_processing_bucket.bucket_arn,
+                f"{pdf_processing_bucket.bucket_arn}/*",
+            ],
         ))
-        ecs_task_role.add_to_policy(iam.PolicyStatement(actions=
-                                                        ["secretsmanager:GetSecretValue"], 
-                                                         resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/db_credentials"] )
-                                                         )
+        
+        # Comprehend permissions for language detection (no resource-level permissions supported)
+        ecs_task_role.add_to_policy(iam.PolicyStatement(
+            actions=["comprehend:DetectDominantLanguage"],
+            resources=["*"],  # Comprehend DetectDominantLanguage does not support resource-level permissions
+        ))
+        
+        # Secrets Manager permissions - scoped to Adobe API credentials
+        ecs_task_role.add_to_policy(iam.PolicyStatement(
+            actions=["secretsmanager:GetSecretValue"],
+            resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/*"],
+        ))
         # Grant S3 read/write access to ECS Task Role
         pdf_processing_bucket.grant_read_write(ecs_task_execution_role)
         # Create ECS Task Log Groups explicitly
@@ -266,9 +287,14 @@ class PDFAccessibility(Stack):
 
         # Add the necessary policy to the Lambda function's role
         title_generator_lambda.add_to_role_policy(cloudwatch_metrics_policy)
+        
+        # Bedrock permissions - scoped to specific model used for title generation
         title_generator_lambda.add_to_role_policy(iam.PolicyStatement(
-            actions=["bedrock:*"],  # Adjust based on the specific Bedrock actions required
-            resources=["*"],
+            actions=["bedrock:InvokeModel"],
+            resources=[
+                f"arn:aws:bedrock:{region}::foundation-model/us.amazon.nova-pro-v1:0",
+                f"arn:aws:bedrock:{region}::foundation-model/amazon.nova-pro-v1:0",
+            ],
         ))
 
         # Chain the tasks in the state machine
