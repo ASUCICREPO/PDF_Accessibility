@@ -237,7 +237,7 @@ class PDFAccessibility(Stack):
             self, 'PdfMergerLambda',
             runtime=lambda_.Runtime.JAVA_21,
             handler='com.example.App::handleRequest',
-            code=lambda_.Code.from_asset('lambda/java_lambda/PDFMergerLambda/target/PDFMergerLambda-1.0-SNAPSHOT.jar'),
+            code=lambda_.Code.from_asset('lambda/pdf-merger-lambda/PDFMergerLambda/target/PDFMergerLambda-1.0-SNAPSHOT.jar'),
             environment={
                 'BUCKET_NAME': pdf_processing_bucket.bucket_name  # this line sets the environment variable
             },
@@ -266,7 +266,7 @@ class PDFAccessibility(Stack):
             self, 'BedrockTitleGeneratorLambda',
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler='title_generator.lambda_handler',
-            code=lambda_.Code.from_docker_build('lambda/add_title'),
+            code=lambda_.Code.from_docker_build('lambda/title-generator-lambda'),
             timeout=Duration.seconds(900),
             memory_size=1024,
             # architecture=lambda_.Architecture.ARM_64
@@ -304,7 +304,7 @@ class PDFAccessibility(Stack):
             self,'PreRemediationAccessibilityAuditor',
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler='main.lambda_handler',
-            code=lambda_.Code.from_docker_build('lambda/accessibility_checker_before_remediation'),
+            code=lambda_.Code.from_docker_build('lambda/pre-remediation-accessibility-checker'),
             timeout=Duration.seconds(900),
             memory_size=512,
             architecture=lambda_arch,
@@ -330,7 +330,7 @@ class PDFAccessibility(Stack):
             self,'PostRemediationAccessibilityAuditor',
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler='main.lambda_handler',
-            code=lambda_.Code.from_docker_build('lambda/accessibility_checker_after_remediation'),
+            code=lambda_.Code.from_docker_build('lambda/post-remediation-accessibility-checker'),
             timeout=Duration.seconds(900),
             memory_size=512,
             architecture=lambda_arch,
@@ -379,7 +379,7 @@ class PDFAccessibility(Stack):
             self, 'PdfChunkSplitterLambda',
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler='main.lambda_handler',
-            code=lambda_.Code.from_docker_build("lambda/split_pdf"),
+            code=lambda_.Code.from_docker_build("lambda/pdf-splitter-lambda"),
             timeout=Duration.seconds(900),
             memory_size=1024
         )
