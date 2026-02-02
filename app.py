@@ -87,13 +87,10 @@ class PDFAccessibility(Stack):
             ]
         )
         
-        # Bedrock permissions - scoped to specific model used for alt-text generation
+        # Bedrock permissions for alt-text generation models
         ecs_task_role.add_to_policy(iam.PolicyStatement(
             actions=["bedrock:InvokeModel"],
-            resources=[
-                f"arn:aws:bedrock:{region}::foundation-model/us.amazon.nova-pro-v1:0",
-                f"arn:aws:bedrock:{region}::foundation-model/amazon.nova-pro-v1:0",
-            ],
+            resources=["*"],
         ))
         
         # S3 permissions - scoped to the processing bucket only
@@ -288,13 +285,10 @@ class PDFAccessibility(Stack):
         # Add the necessary policy to the Lambda function's role
         title_generator_lambda.add_to_role_policy(cloudwatch_metrics_policy)
         
-        # Bedrock permissions - scoped to specific model used for title generation
+        # Bedrock permissions for title generation models
         title_generator_lambda.add_to_role_policy(iam.PolicyStatement(
             actions=["bedrock:InvokeModel"],
-            resources=[
-                f"arn:aws:bedrock:{region}::foundation-model/us.amazon.nova-pro-v1:0",
-                f"arn:aws:bedrock:{region}::foundation-model/amazon.nova-pro-v1:0",
-            ],
+            resources=["*"],
         ))
 
         # Chain the tasks in the state machine
