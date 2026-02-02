@@ -42,6 +42,16 @@ const Database = require('better-sqlite3');
 
 const pipeline = promisify(stream.pipeline);
 
+// ============================================================================
+// MODEL CONFIGURATION - Edit these values to change the AI models used
+// ============================================================================
+// Model ID for generating alt text for images (requires vision capability)
+const MODEL_ID_ALT_TEXT = "us.amazon.nova-pro-v1:0";
+
+// Model ID for generating alt text for hyperlinks (text-only, can use lighter model)
+const MODEL_ID_LINK_ALT_TEXT = "us.amazon.nova-lite-v1:0";
+// ============================================================================
+
 // Configure logger
 const logger = winston.createLogger({
     level: 'info',
@@ -67,7 +77,6 @@ function sleep(ms) {
  * 
  * @param {string} [prompt="generate alt text for this image"] - The prompt to guide the model in generating the alt text.
  * @param {Buffer} [imageBuffer=null] - The buffer containing the image data.
- * @param {string} [modelId="anthropic.claude-3-5-sonnet-20241022-v2:0"] - The ID of the Bedrock model to be used.
  * @returns {Promise<Object>} - A promise that resolves with the model's response, including the generated alt text.
  * @throws {Error} - Throws an error if invoking the model fails.
  */
@@ -77,7 +86,6 @@ const invokeModel = async (
 ) => {
     // Create a new Bedrock Runtime client instance.
     const client = new BedrockRuntimeClient({ region: AWS_REGION });
-    const model_arn_image = process.env.model_arn_image;
     
     // Convert the image buffer to a base64-encoded string
     const inputImageBase64 = imageBuffer ? imageBuffer.toString('base64') : null;
@@ -118,7 +126,7 @@ const invokeModel = async (
 
     // Invoke the model with the payload and wait for the response.
     const command = new InvokeModelCommand({
-        modelId: "us.amazon.nova-pro-v1:0", // Replace with your model ID
+        modelId: MODEL_ID_ALT_TEXT,
         contentType: "application/json",
         accept: "application/json",
         body: JSON.stringify(payload)
@@ -228,17 +236,15 @@ async function generateAltText(imageObject, imageBuffer) {
  * The function sends a prompt to the model and returns the generated alt text describing the link's destination or purpose.
  * 
  * @param {string} [prompt="Generate alt text for this link"] - The prompt to guide the model in generating the alt text for the link.
- * @param {string} [modelId="us.anthropic.claude-3-haiku-20240307-v1:0"] - The ID of the Bedrock model to be used.
  * @returns {Promise<string>} - A promise that resolves with the generated alt text for the link.
  * @throws {Error} - Throws an error if invoking the model fails.
  */
 const invokeModel_alt_text_links = async (
-    prompt = "Generate alt text for this link",
-    modelId = "us.amazon.nova-pro-v1:0"
+    prompt = "Generate alt text for this link"
 ) => {
     logger.info(`generating link alt text`);
     const client = new BedrockRuntimeClient({ region: AWS_REGION });
-    const model_arn_link = process.env.model_arn_link
+    
     const payload = {
         system: [
           {
@@ -266,7 +272,7 @@ const invokeModel_alt_text_links = async (
 
     // Invoke the model with the payload and wait for the response.
     const command = new InvokeModelCommand({
-        modelId: "us.amazon.nova-pro-v1:0", // Replace with your model ID
+        modelId: MODEL_ID_LINK_ALT_TEXT,
         contentType: "application/json",
         accept: "application/json",
         body: JSON.stringify(payload)
@@ -297,7 +303,7 @@ async function generateAltTextForLink(url) {
     1. Just give only alt text. do not give give any other word or phrases like "Here is the alt text" or "The alt text is" etc.
     2. The alt text should be clear and concise, providing a brief description of the link's destination or purpose.`;
     try {
-        return await invokeModel_alt_text_links(prompt, "us.amazon.nova-lite-v1:0");
+        return await invokeModel_alt_text_links(prompt);
     } catch (error) {
         console.error(`Error generating alt text for link: ${error}`);
         throw error;
