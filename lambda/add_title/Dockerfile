@@ -7,7 +7,7 @@ ENV LAMBDA_TASK_ROOT=/asset
 RUN mkdir -p /asset
 
 # Copy function code to the /asset directory
-COPY myapp.py /asset/
+COPY title_generator.py /asset/
 
 # Copy requirements.txt to /tmp directory
 COPY requirements.txt /tmp/
@@ -25,4 +25,4 @@ RUN rm -rf /tmp/*
 WORKDIR /asset
 
 # Specify the Lambda handler
-CMD ["myapp.lambda_handler"]
+CMD ["title_generator.lambda_handler"]

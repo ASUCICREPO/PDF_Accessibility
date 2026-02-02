@@ -1,0 +1,24 @@
+# Use an official Python runtime as a parent image
+FROM public.ecr.aws/docker/library/python:3.12-slim
+
+# Set the working directory in the container to /app
+WORKDIR /app
+
+# Copy the current directory contents into the container at /app
+COPY . /app
+
+# Create required directories
+RUN mkdir -p /output/AutotagPDF \
+    /output/ExtractTextInfoFromPDF \
+    /output/zipfile/images
+
+
+# Upgrade pip and install Python dependencies
+RUN python -m pip install --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Verify that the application files are present
+RUN ls -la /app
+
+# Set the command to run the Python script when the container launches
+CMD ["python", "./adobe_autotag_processor.py"]
