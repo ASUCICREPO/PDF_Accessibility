@@ -61,11 +61,13 @@ Ensure your project has the following structure:
 ```
 ├── app.py (Main CDK app)
 ├── lambda/
-│   ├── split_pdf/ (Python Lambda for splitting PDF)
-│   └── java_lambda/ (Java Lambda for merging PDFs)
-├── docker_autotag/ (Python Docker image for ECS task)
-└── javascript_docker/ (JavaScript Docker image for ECS task)
-|__ client_credentials.json (The client id and client secret id for adobe)
+│   ├── pdf-splitter-lambda/ (Python Lambda for splitting PDF)
+│   ├── pdf-merger-lambda/ (Java Lambda for merging PDFs)
+│   ├── title-generator-lambda/ (Python Lambda for generating titles)
+│   ├── pre-remediation-accessibility-checker/ (Python Lambda for pre-check)
+│   └── post-remediation-accessibility-checker/ (Python Lambda for post-check)
+├── adobe-autotag-container/ (Python Docker image for ECS task)
+└── alt-text-generator-container/ (JavaScript Docker image for ECS task)
 ```
 
 ## Setup and Deployment
@@ -161,9 +163,8 @@ Ensure your project has the following structure:
 
 Once the infrastructure is deployed:
 
-1. Create a `pdf/` folder in the S3 bucket created by the CDK stack.
-2. Upload a PDF file to the `pdf/` folder in the S3 bucket.
-3. The process will automatically trigger and start processing the PDF.
+1. Upload a PDF file to the `pdf/` folder in the S3 bucket (the folder is created automatically when you upload).
+2. The process will automatically trigger and start processing the PDF.
 
 ## Monitoring
 
