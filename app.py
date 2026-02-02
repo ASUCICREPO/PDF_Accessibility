@@ -40,15 +40,31 @@ class PDFAccessibility(Stack):
             sources=[s3deploy.Source.data("pdf/.keep", "")],
             destination_bucket=pdf_processing_bucket,
         )
-    
+        
+        # Get account and region for use throughout the stack
+        account_id = Stack.of(self).account
+        region = Stack.of(self).region
 
+        # Docker images with zstd compression for faster Fargate cold starts
+        # zstd decompresses ~2-3x faster than gzip, reducing container startup time
         adobe_autotag_image_asset = ecr_assets.DockerImageAsset(self, "AdobeAutotagImage",
                                                          directory="adobe-autotag-container",
-                                                        platform=ecr_assets.Platform.LINUX_AMD64)
+                                                         platform=ecr_assets.Platform.LINUX_AMD64,
+                                                         # Enable zstd compression for faster decompression on Fargate
+                                                         cache_to=ecr_assets.DockerCacheOption(
+                                                             type="inline"
+                                                         ),
+                                                         outputs=["type=image,compression=zstd,compression-level=3,force-compression=true"])
 
         alt_text_generator_image_asset = ecr_assets.DockerImageAsset(self, "AltTextGeneratorImage",
                                                              directory="alt-text-generator-container",
-                                                             platform=ecr_assets.Platform.LINUX_AMD64)
+                                                             platform=ecr_assets.Platform.LINUX_AMD64,
+                                                             # Enable zstd compression for faster decompression on Fargate
+                                                             cache_to=ecr_assets.DockerCacheOption(
+                                                                 type="inline"
+                                                             ),
+                                                             outputs=["type=image,compression=zstd,compression-level=3,force-compression=true"])
+
         # VPC with Public and Private Subnets
         pdf_processing_vpc = ec2.Vpc(self, "PdfProcessingVpc",
             max_azs=2,
@@ -87,10 +103,6 @@ class PDFAccessibility(Stack):
                 iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
             ])
 
-        # Allow ECS Task Role to access Bedrock services
-        account_id = Stack.of(self).account
-        region = Stack.of(self).region
-        
         ecs_task_role = iam.Role(self, "EcsTaskExecutionRole",
             assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
             managed_policies=[
