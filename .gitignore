@@ -16,7 +16,7 @@ __pycache__/
 *.pyc
 javascript_docker/node_modules
 lambda/add_title/venv
-
+PDF_accessability_UI
 # IDE and editor files
 **/.vscode/
 # OS generated files
