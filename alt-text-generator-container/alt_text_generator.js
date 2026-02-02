@@ -525,7 +525,7 @@ async function startProcess() {
                 logger.error(`Filename: ${filebasename} | Alt text generation failed for image ${imageObject.id}: ${error.message || error}`);
                 logger.info(`Filename: ${filebasename} | Progress: ${successCount} succeeded, ${failureCount} failed`);
             }
-            await sleep(5000);
+            await sleep(2000);
         }
 
         // Check if we have any images and if all of them failed
