@@ -14,7 +14,6 @@ from aws_cdk import (
     aws_logs as logs,
     aws_ecr_assets as ecr_assets,
     aws_cloudwatch as cloudwatch,
-    aws_secretsmanager as secretsmanager
 )
 from constructs import Construct
 import platform
@@ -97,13 +96,13 @@ class PDFAccessibility(Stack):
         pdf_processing_bucket.grant_read_write(ecs_task_execution_role)
         # Create ECS Task Log Groups explicitly
         adobe_autotag_log_group = logs.LogGroup(self, "AdobeAutotagContainerLogs",
-                                                log_group_name="/ecs/MyFirstTaskDef/PythonContainerLogGroup",
-                                                retention=logs.RetentionDays.ONE_WEEK,
+                                                log_group_name="/ecs/pdf-remediation/adobe-autotag",
+                                                retention=logs.RetentionDays.ONE_MONTH,
                                                 removal_policy=cdk.RemovalPolicy.DESTROY)
 
         alt_text_generator_log_group = logs.LogGroup(self, "AltTextGeneratorContainerLogs",
-                                                    log_group_name="/ecs/MySecondTaskDef/JavaScriptContainerLogGroup",
-                                                    retention=logs.RetentionDays.ONE_WEEK,
+                                                    log_group_name="/ecs/pdf-remediation/alt-text-generator",
+                                                    retention=logs.RetentionDays.ONE_MONTH,
                                                     removal_policy=cdk.RemovalPolicy.DESTROY)
         # ECS Task Definitions
         adobe_autotag_task_def = ecs.FargateTaskDefinition(self, "AdobeAutotagTaskDefinition",
@@ -328,8 +327,8 @@ class PDFAccessibility(Stack):
         parallel_accessibility_workflow.branch(pre_remediation_accessibility_checker_task)
 
         pdf_remediation_workflow_log_group = logs.LogGroup(self, "PdfRemediationWorkflowLogs",
-            log_group_name="/aws/states/MyStateMachine_PDFAccessibility",
-            retention=logs.RetentionDays.ONE_WEEK,
+            log_group_name="/aws/states/pdf-accessibility-remediation-workflow",
+            retention=logs.RetentionDays.ONE_MONTH,
             removal_policy=cdk.RemovalPolicy.DESTROY
         )
         # State Machine
