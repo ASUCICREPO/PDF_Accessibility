@@ -22,3 +22,6 @@ lambda/add_title/venv
 # OS generated files
 **/.DS_Store
 **/.DS_Store?
+
+# PDF UI (separate repo)
+PDF_accessability_UI/
