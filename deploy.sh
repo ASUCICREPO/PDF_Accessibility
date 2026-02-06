@@ -201,178 +201,177 @@ EOF
 
         # Create minimal IAM policy based on solution type
         if [ "$DEPLOYMENT_TYPE" == "pdf2pdf" ]; then
-            # PDF-to-PDF minimal policy
+            # PDF-to-PDF scoped policy for CDK deployment
+            # Note: Some wildcards retained due to AWS policy size limits (6,144 chars max)
+            # but resources are scoped to specific patterns
             POLICY_NAME="${PROJECT_NAME}-pdf2pdf-codebuild-policy"
             POLICY_DOCUMENT='{
                 "Version": "2012-10-17",
                 "Statement": [
                     {
-                        "Sid": "S3FullAccess",
+                        "Sid": "S3Access",
                         "Effect": "Allow",
-                        "Action": ["s3:*"],
-                        "Resource": "*"
+                        "Action": "s3:*",
+                        "Resource": ["arn:aws:s3:::cdk-*", "arn:aws:s3:::cdk-*/*", "arn:aws:s3:::pdfaccessibility*", "arn:aws:s3:::pdfaccessibility*/*"]
                     },
                     {
-                        "Sid": "ECRFullAccess",
+                        "Sid": "ECRAccess",
                         "Effect": "Allow",
                         "Action": ["ecr:*"],
+                        "Resource": "arn:aws:ecr:*:*:repository/cdk-*"
+                    },
+                    {
+                        "Sid": "ECRAuth",
+                        "Effect": "Allow",
+                        "Action": "ecr:GetAuthorizationToken",
                         "Resource": "*"
                     },
                     {
-                        "Sid": "LambdaFullAccess",
+                        "Sid": "LambdaAccess",
                         "Effect": "Allow",
-                        "Action": ["lambda:*"],
+                        "Action": "lambda:*",
+                        "Resource": "arn:aws:lambda:*:*:function:*"
+                    },
+                    {
+                        "Sid": "ECSAccess",
+                        "Effect": "Allow",
+                        "Action": "ecs:*",
                         "Resource": "*"
                     },
                     {
-                        "Sid": "ECSFullAccess",
+                        "Sid": "EC2Access",
                         "Effect": "Allow",
-                        "Action": ["ecs:*"],
+                        "Action": "ec2:*",
                         "Resource": "*"
                     },
                     {
-                        "Sid": "EC2FullAccess",
+                        "Sid": "StepFunctionsAccess",
                         "Effect": "Allow",
-                        "Action": ["ec2:*"],
+                        "Action": "states:*",
+                        "Resource": "arn:aws:states:*:*:stateMachine:*"
+                    },
+                    {
+                        "Sid": "IAMRoleAccess",
+                        "Effect": "Allow",
+                        "Action": ["iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:PassRole", "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy", "iam:TagRole", "iam:UntagRole", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:UpdateAssumeRolePolicy", "iam:ListRoleTags"],
+                        "Resource": ["arn:aws:iam::*:role/PDFAccessibility*", "arn:aws:iam::*:role/cdk-*"]
+                    },
+                    {
+                        "Sid": "IAMPolicyAccess",
+                        "Effect": "Allow",
+                        "Action": ["iam:CreatePolicy", "iam:DeletePolicy", "iam:GetPolicy", "iam:GetPolicyVersion", "iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:ListPolicyVersions"],
+                        "Resource": "arn:aws:iam::*:policy/*"
+                    },
+                    {
+                        "Sid": "CloudFormationAccess",
+                        "Effect": "Allow",
+                        "Action": "cloudformation:*",
+                        "Resource": ["arn:aws:cloudformation:*:*:stack/PDFAccessibility*/*", "arn:aws:cloudformation:*:*:stack/CDKToolkit/*"]
+                    },
+                    {
+                        "Sid": "LogsAccess",
+                        "Effect": "Allow",
+                        "Action": "logs:*",
+                        "Resource": ["arn:aws:logs:*:*:log-group:/aws/codebuild/*", "arn:aws:logs:*:*:log-group:/aws/lambda/*", "arn:aws:logs:*:*:log-group:/ecs/*", "arn:aws:logs:*:*:log-group:/aws/states/*"]
+                    },
+                    {
+                        "Sid": "CloudWatchAccess",
+                        "Effect": "Allow",
+                        "Action": ["cloudwatch:PutMetricData", "cloudwatch:PutDashboard", "cloudwatch:DeleteDashboards", "cloudwatch:GetDashboard"],
                         "Resource": "*"
                     },
                     {
-                        "Sid": "StepFunctionsFullAccess",
+                        "Sid": "SecretsManagerAccess",
                         "Effect": "Allow",
-                        "Action": ["states:*"],
-                        "Resource": "*"
-                    },
-                    {
-                        "Sid": "IAMFullAccess",
-                        "Effect": "Allow",
-                        "Action": ["iam:*"],
-                        "Resource": "*"
-                    },
-                    {
-                        "Sid": "CloudFormationFullAccess",
-                        "Effect": "Allow",
-                        "Action": ["cloudformation:*"],
-                        "Resource": "*"
-                    },
-                    {
-                        "Sid": "BedrockFullAccess",
-                        "Effect": "Allow",
-                        "Action": [
-                            "bedrock:*",
-                            "bedrock-data-automation:*",
-                            "bedrock-data-automation-runtime:*"
-                        ],
-                        "Resource": "*"
-                    },
-                    {
-                        "Sid": "CloudWatchLogsFullAccess",
-                        "Effect": "Allow",
-                        "Action": ["logs:*"],
-                        "Resource": "*"
-                    },
-                    {
-                        "Sid": "CloudWatchFullAccess",
-                        "Effect": "Allow",
-                        "Action": ["cloudwatch:*"],
-                        "Resource": "*"
-                    },
-                    {
-                        "Sid": "SecretsManagerFullAccess",
-                        "Effect": "Allow",
-                        "Action": ["secretsmanager:*"],
-                        "Resource": "*"
+                        "Action": ["secretsmanager:CreateSecret", "secretsmanager:UpdateSecret", "secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+                        "Resource": "arn:aws:secretsmanager:*:*:secret:/myapp/*"
                     },
                     {
                         "Sid": "STSAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "sts:GetCallerIdentity",
-                            "sts:AssumeRole"
-                        ],
+                        "Action": ["sts:GetCallerIdentity", "sts:AssumeRole"],
                         "Resource": "*"
                     },
                     {
-                        "Sid": "SSMParameterAccess",
+                        "Sid": "SSMAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "ssm:GetParameter",
-                            "ssm:GetParameters",
-                            "ssm:PutParameter"
-                        ],
-                        "Resource": "*"
+                        "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:PutParameter"],
+                        "Resource": "arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"
                     }
                 ]
             }'
         else
-            # PDF-to-HTML minimal policy
+            # PDF-to-HTML scoped policy for CDK deployment
+            # Note: Some wildcards retained due to AWS policy size limits (6,144 chars max)
             POLICY_NAME="${PROJECT_NAME}-pdf2html-codebuild-policy"
             POLICY_DOCUMENT='{
                 "Version": "2012-10-17",
                 "Statement": [
                     {
-                        "Sid": "S3FullAccess",
+                        "Sid": "S3Access",
                         "Effect": "Allow",
-                        "Action": ["s3:*"],
+                        "Action": "s3:*",
+                        "Resource": ["arn:aws:s3:::cdk-*", "arn:aws:s3:::cdk-*/*", "arn:aws:s3:::pdf2html-*", "arn:aws:s3:::pdf2html-*/*"]
+                    },
+                    {
+                        "Sid": "ECRAccess",
+                        "Effect": "Allow",
+                        "Action": "ecr:*",
+                        "Resource": ["arn:aws:ecr:*:*:repository/cdk-*", "arn:aws:ecr:*:*:repository/pdf2html-*"]
+                    },
+                    {
+                        "Sid": "ECRAuth",
+                        "Effect": "Allow",
+                        "Action": "ecr:GetAuthorizationToken",
                         "Resource": "*"
                     },
                     {
-                        "Sid": "ECRFullAccess",
+                        "Sid": "LambdaAccess",
                         "Effect": "Allow",
-                        "Action": ["ecr:*"],
+                        "Action": "lambda:*",
+                        "Resource": ["arn:aws:lambda:*:*:function:Pdf2Html*", "arn:aws:lambda:*:*:function:pdf2html*"]
+                    },
+                    {
+                        "Sid": "IAMRoleAccess",
+                        "Effect": "Allow",
+                        "Action": ["iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:PassRole", "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy", "iam:TagRole", "iam:UntagRole", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:UpdateAssumeRolePolicy", "iam:ListRoleTags"],
+                        "Resource": ["arn:aws:iam::*:role/Pdf2Html*", "arn:aws:iam::*:role/pdf2html*", "arn:aws:iam::*:role/cdk-*"]
+                    },
+                    {
+                        "Sid": "IAMPolicyAccess",
+                        "Effect": "Allow",
+                        "Action": ["iam:CreatePolicy", "iam:DeletePolicy", "iam:GetPolicy", "iam:GetPolicyVersion", "iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:ListPolicyVersions"],
+                        "Resource": "arn:aws:iam::*:policy/*"
+                    },
+                    {
+                        "Sid": "CloudFormationAccess",
+                        "Effect": "Allow",
+                        "Action": "cloudformation:*",
+                        "Resource": ["arn:aws:cloudformation:*:*:stack/Pdf2Html*/*", "arn:aws:cloudformation:*:*:stack/pdf2html*/*", "arn:aws:cloudformation:*:*:stack/CDKToolkit/*"]
+                    },
+                    {
+                        "Sid": "BedrockAccess",
+                        "Effect": "Allow",
+                        "Action": ["bedrock:CreateDataAutomationProject", "bedrock:GetDataAutomationProject", "bedrock:DeleteDataAutomationProject", "bedrock:UpdateDataAutomationProject", "bedrock:ListDataAutomationProjects"],
                         "Resource": "*"
                     },
                     {
-                        "Sid": "LambdaFullAccess",
+                        "Sid": "LogsAccess",
                         "Effect": "Allow",
-                        "Action": ["lambda:*"],
-                        "Resource": "*"
-                    },
-                    {
-                        "Sid": "IAMFullAccess",
-                        "Effect": "Allow",
-                        "Action": ["iam:*"],
-                        "Resource": "*"
-                    },
-                    {
-                        "Sid": "CloudFormationFullAccess",
-                        "Effect": "Allow",
-                        "Action": ["cloudformation:*"],
-                        "Resource": "*"
-                    },
-                    {
-                        "Sid": "BedrockFullAccess",
-                        "Effect": "Allow",
-                        "Action": [
-                            "bedrock:*",
-                            "bedrock-data-automation:*",
-                            "bedrock-data-automation-runtime:*"
-                        ],
-                        "Resource": "*"
-                    },
-                    {
-                        "Sid": "CloudWatchLogsFullAccess",
-                        "Effect": "Allow",
-                        "Action": ["logs:*"],
-                        "Resource": "*"
+                        "Action": "logs:*",
+                        "Resource": ["arn:aws:logs:*:*:log-group:/aws/codebuild/*", "arn:aws:logs:*:*:log-group:/aws/lambda/Pdf2Html*"]
                     },
                     {
                         "Sid": "STSAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "sts:GetCallerIdentity",
-                            "sts:AssumeRole"
-                        ],
+                        "Action": ["sts:GetCallerIdentity", "sts:AssumeRole"],
                         "Resource": "*"
                     },
                     {
-                        "Sid": "SSMParameterAccess",
+                        "Sid": "SSMAccess",
                         "Effect": "Allow",
-                        "Action": [
-                            "ssm:GetParameter",
-                            "ssm:GetParameters",
-                            "ssm:PutParameter"
-                        ],
-                        "Resource": "*"
+                        "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:PutParameter"],
+                        "Resource": "arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"
                     }
                 ]
             }'

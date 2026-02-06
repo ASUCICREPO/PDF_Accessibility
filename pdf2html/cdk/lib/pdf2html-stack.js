@@ -54,24 +54,53 @@ class Pdf2HtmlStack extends Stack {
       resources: [`arn:aws:s3:::${bucketName.valueAsString}`, `arn:aws:s3:::${bucketName.valueAsString}/*`],
     }));
 
-    // Add permissions for Bedrock
+    // Add permissions for Bedrock - scoped to specific actions needed
     lambdaRole.addToPolicy(new iam.PolicyStatement({
       actions: [
-        'bedrock:*',
-        'bedrock-data-automation:*',
-        'bedrock-data-automation-runtime:*'
+        'bedrock:InvokeModel',
+        'bedrock:InvokeModelWithResponseStream',
       ],
-      resources: ['*'],
+      resources: [
+        `arn:aws:bedrock:${this.region}::foundation-model/us.amazon.nova-lite-v1:0`,
+        `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-lite-v1:0`,
+        `arn:aws:bedrock:${this.region}::foundation-model/us.amazon.nova-pro-v1:0`,
+        `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-pro-v1:0`,
+      ],
     }));
     
-    // Add CloudWatch Logs permissions
+    // Bedrock Data Automation permissions - scoped to specific project
+    lambdaRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        'bedrock:InvokeDataAutomationAsync',
+        'bedrock:GetDataAutomationStatus',
+        'bedrock:GetDataAutomationProject',
+      ],
+      resources: [
+        bdaProjectArn.valueAsString,
+        `arn:aws:bedrock:${this.region}:${this.account}:data-automation-invocation/*`,
+      ],
+    }));
+    
+    // Bedrock Data Automation profile access (required for BDA operations)
+    lambdaRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        'bedrock:InvokeDataAutomationAsync',
+      ],
+      resources: [
+        `arn:aws:bedrock:${this.region}:${this.account}:data-automation-profile/*`,
+      ],
+    }));
+    
+    // Add CloudWatch Logs permissions - scoped to Lambda log group
     lambdaRole.addToPolicy(new iam.PolicyStatement({
       actions: [
         'logs:CreateLogGroup',
         'logs:CreateLogStream',
         'logs:PutLogEvents'
       ],
-      resources: ['arn:aws:logs:*:*:*'],
+      resources: [
+        `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/Pdf2HtmlPipeline:*`,
+      ],
     }));
 
     // Create Lambda function

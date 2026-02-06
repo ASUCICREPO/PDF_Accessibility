@@ -5,6 +5,7 @@ from aws_cdk import (
     aws_lambda as lambda_,
     aws_s3 as s3,
     aws_s3_notifications as s3n,
+    aws_s3_deployment as s3deploy,
     aws_iam as iam,
     aws_ec2 as ec2,
     aws_ecs as ecs,
@@ -14,7 +15,6 @@ from aws_cdk import (
     aws_logs as logs,
     aws_ecr_assets as ecr_assets,
     aws_cloudwatch as cloudwatch,
-    aws_secretsmanager as secretsmanager
 )
 from constructs import Construct
 import platform
@@ -25,7 +25,7 @@ class PDFAccessibility(Stack):
         super().__init__(scope, construct_id, **kwargs)
         
         # S3 Bucket
-        bucket = s3.Bucket(self, "pdfaccessibilitybucket1", 
+        pdf_processing_bucket = s3.Bucket(self, "pdfaccessibilitybucket1", 
                           encryption=s3.BucketEncryption.S3_MANAGED, 
                           enforce_ssl=True,
                           cors=[s3.CorsRule(
@@ -35,34 +35,67 @@ class PDFAccessibility(Stack):
                               exposed_headers=[]
                           )])
     
+        # Create pdf/ folder in the bucket
+        s3deploy.BucketDeployment(self, "CreatePdfFolder",
+            sources=[s3deploy.Source.data("pdf/.keep", "")],
+            destination_bucket=pdf_processing_bucket,
+        )
+        
+        # Get account and region for use throughout the stack
+        account_id = Stack.of(self).account
+        region = Stack.of(self).region
 
-        python_image_asset = ecr_assets.DockerImageAsset(self, "PythonImage",
-                                                         directory="docker_autotag",
-                                                        platform=ecr_assets.Platform.LINUX_AMD64)
+        # Docker images with zstd compression for faster Fargate cold starts
+        # zstd decompresses ~2-3x faster than gzip, reducing container startup time
+        adobe_autotag_image_asset = ecr_assets.DockerImageAsset(self, "AdobeAutotagImage",
+                                                         directory="adobe-autotag-container",
+                                                         platform=ecr_assets.Platform.LINUX_AMD64,
+                                                         # Enable zstd compression for faster decompression on Fargate
+                                                         cache_to=ecr_assets.DockerCacheOption(
+                                                             type="inline"
+                                                         ),
+                                                         outputs=["type=image,compression=zstd,compression-level=3,force-compression=true"])
 
-        javascript_image_asset = ecr_assets.DockerImageAsset(self, "JavaScriptImage",
-                                                             directory="javascript_docker",
-                                                             platform=ecr_assets.Platform.LINUX_AMD64)
+        alt_text_generator_image_asset = ecr_assets.DockerImageAsset(self, "AltTextGeneratorImage",
+                                                             directory="alt-text-generator-container",
+                                                             platform=ecr_assets.Platform.LINUX_AMD64,
+                                                             # Enable zstd compression for faster decompression on Fargate
+                                                             cache_to=ecr_assets.DockerCacheOption(
+                                                                 type="inline"
+                                                             ),
+                                                             outputs=["type=image,compression=zstd,compression-level=3,force-compression=true"])
+
         # VPC with Public and Private Subnets
-        vpc = ec2.Vpc(self, "MyVpc",
+        pdf_processing_vpc = ec2.Vpc(self, "PdfProcessingVpc",
             max_azs=2,
             nat_gateways=1,
             subnet_configuration=[
                 ec2.SubnetConfiguration(
                     subnet_type=ec2.SubnetType.PUBLIC,
-                    name="Public",
+                    name="PdfProcessingPublic",
                     cidr_mask=24,
                 ),
                 ec2.SubnetConfiguration(
                     subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
-                    name="Private",
+                    name="PdfProcessingPrivate",
                     cidr_mask=24,
                 ),
             ]
         )
 
+        # VPC Endpoints for faster ECR image pulls (reduces cold start by 10-15s)
+        pdf_processing_vpc.add_interface_endpoint("EcrApiEndpoint",
+            service=ec2.InterfaceVpcEndpointAwsService.ECR
+        )
+        pdf_processing_vpc.add_interface_endpoint("EcrDockerEndpoint",
+            service=ec2.InterfaceVpcEndpointAwsService.ECR_DOCKER
+        )
+        pdf_processing_vpc.add_gateway_endpoint("S3Endpoint",
+            service=ec2.GatewayVpcEndpointAwsService.S3
+        )
+
         # ECS Cluster
-        cluster = ecs.Cluster(self, "FargateCluster", vpc=vpc)
+        pdf_remediation_cluster = ecs.Cluster(self, "PdfRemediationCluster", vpc=pdf_processing_vpc)
 
         ecs_task_execution_role = iam.Role(self, "EcsTaskRole",
                                  assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
@@ -70,80 +103,90 @@ class PDFAccessibility(Stack):
                 iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
             ])
 
-        # Allow ECS Task Role to access Bedrock services
-        account_id = Stack.of(self).account
-        region = Stack.of(self).region
-        
         ecs_task_role = iam.Role(self, "EcsTaskExecutionRole",
             assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy"),
-                iam.ManagedPolicy.from_aws_managed_policy_name("SecretsManagerReadWrite")  # Add this line
             ]
         )
+        
+        # Bedrock permissions for alt-text generation models
         ecs_task_role.add_to_policy(iam.PolicyStatement(
-            actions=["bedrock:*"],  # Adjust based on the specific Bedrock actions required
+            actions=["bedrock:InvokeModel"],
             resources=["*"],
         ))
+        
+        # S3 permissions - scoped to the processing bucket only
         ecs_task_role.add_to_policy(iam.PolicyStatement(
-            actions=["s3:*"],  # This gives access to all S3 actions
-            resources=["*"],   # This applies the actions to all resources
+            actions=[
+                "s3:GetObject",
+                "s3:PutObject",
+                "s3:DeleteObject",
+            ],
+            resources=[
+                pdf_processing_bucket.bucket_arn,
+                f"{pdf_processing_bucket.bucket_arn}/*",
+            ],
         ))
-        ecs_task_role.add_to_policy(iam.PolicyStatement(actions=
-                                                        ["secretsmanager:GetSecretValue"], 
-                                                         resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/db_credentials"] )
-                                                         )
+        
+        # Comprehend permissions for language detection (no resource-level permissions supported)
+        ecs_task_role.add_to_policy(iam.PolicyStatement(
+            actions=["comprehend:DetectDominantLanguage"],
+            resources=["*"],  # Comprehend DetectDominantLanguage does not support resource-level permissions
+        ))
+        
+        # Secrets Manager permissions - scoped to Adobe API credentials
+        ecs_task_role.add_to_policy(iam.PolicyStatement(
+            actions=["secretsmanager:GetSecretValue"],
+            resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/*"],
+        ))
         # Grant S3 read/write access to ECS Task Role
-        bucket.grant_read_write(ecs_task_execution_role)
+        pdf_processing_bucket.grant_read_write(ecs_task_execution_role)
         # Create ECS Task Log Groups explicitly
-        python_container_log_group = logs.LogGroup(self, "PythonContainerLogGroup",
-                                                log_group_name="/ecs/MyFirstTaskDef/PythonContainerLogGroup",
-                                                retention=logs.RetentionDays.ONE_WEEK,
+        adobe_autotag_log_group = logs.LogGroup(self, "AdobeAutotagContainerLogs",
+                                                log_group_name="/ecs/pdf-remediation/adobe-autotag",
+                                                retention=logs.RetentionDays.ONE_MONTH,
                                                 removal_policy=cdk.RemovalPolicy.DESTROY)
 
-        javascript_container_log_group = logs.LogGroup(self, "JavaScriptContainerLogGroup",
-                                                    log_group_name="/ecs/MySecondTaskDef/JavaScriptContainerLogGroup",
-                                                    retention=logs.RetentionDays.ONE_WEEK,
+        alt_text_generator_log_group = logs.LogGroup(self, "AltTextGeneratorContainerLogs",
+                                                    log_group_name="/ecs/pdf-remediation/alt-text-generator",
+                                                    retention=logs.RetentionDays.ONE_MONTH,
                                                     removal_policy=cdk.RemovalPolicy.DESTROY)
         # ECS Task Definitions
-        task_definition_1 = ecs.FargateTaskDefinition(self, "MyFirstTaskDef",
+        adobe_autotag_task_def = ecs.FargateTaskDefinition(self, "AdobeAutotagTaskDefinition",
                                                       memory_limit_mib=1024,
                                                       cpu=256, execution_role=ecs_task_execution_role, task_role=ecs_task_role,
                                                      )
 
-        container_definition_1 = task_definition_1.add_container("python_container",
-                                                                  image=ecs.ContainerImage.from_registry(python_image_asset.image_uri),
+        adobe_autotag_container_def = adobe_autotag_task_def.add_container("adobe-autotag-container",
+                                                                  image=ecs.ContainerImage.from_registry(adobe_autotag_image_asset.image_uri),
                                                                   memory_limit_mib=1024,
                                                                   logging=ecs.LogDrivers.aws_logs(
-        stream_prefix="PythonContainerLogs",
-        log_group=python_container_log_group,
+        stream_prefix="AdobeAutotagLogs",
+        log_group=adobe_autotag_log_group,
     ))
 
-        task_definition_2 = ecs.FargateTaskDefinition(self, "MySecondTaskDef",
+        alt_text_task_def = ecs.FargateTaskDefinition(self, "AltTextGenerationTaskDefinition",
                                                       memory_limit_mib=1024,
                                                       cpu=256, execution_role=ecs_task_execution_role, task_role=ecs_task_role,
                                                       )
 
-        container_definition_2 = task_definition_2.add_container("javascript_container",
-                                                                  image=ecs.ContainerImage.from_registry(javascript_image_asset.image_uri),
+        alt_text_container_def = alt_text_task_def.add_container("alt-text-llm-container",
+                                                                  image=ecs.ContainerImage.from_registry(alt_text_generator_image_asset.image_uri),
                                                                   memory_limit_mib=1024,
                                                                    logging=ecs.LogDrivers.aws_logs(
-        stream_prefix="JavaScriptContainerLogs",
-        log_group=javascript_container_log_group
+        stream_prefix="AltTextGeneratorLogs",
+        log_group=alt_text_generator_log_group
     ))
-        model_id_image = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0'
-        model_id_link = 'us.anthropic.claude-3-haiku-20240307-v1:0'
-        model_arn_image = f'arn:aws:bedrock:{region}:{account_id}:inference-profile/{model_id_image}'
-        model_arn_link = f'arn:aws:bedrock:{region}:{account_id}:inference-profile/{model_id_link}'
         # ECS Tasks in Step Functions
-        ecs_task_1 = tasks.EcsRunTask(self, "ECS RunTask",
+        adobe_autotag_task = tasks.EcsRunTask(self, "RunAdobeAutotagTask",
                                       integration_pattern=sfn.IntegrationPattern.RUN_JOB,
-                                      cluster=cluster,
-                                      task_definition=task_definition_1,
+                                      cluster=pdf_remediation_cluster,
+                                      task_definition=adobe_autotag_task_def,
                                       assign_public_ip=False,
                                       
                                       container_overrides=[tasks.ContainerOverride(
-                                       container_definition = container_definition_1,
+                                       container_definition = adobe_autotag_container_def,
                                           environment=[
                                               tasks.TaskEnvironmentVariable(
                                                   name="S3_BUCKET_NAME",
@@ -158,14 +201,6 @@ class PDFAccessibility(Stack):
                                                   value=sfn.JsonPath.string_at("$.chunk_key")
                                               ),
                                             tasks.TaskEnvironmentVariable(
-                                                  name="model_arn_image",
-                                                  value=model_arn_image
-                                              ),
-                                            tasks.TaskEnvironmentVariable(
-                                                  name="model_arn_link",
-                                                  value=model_arn_link
-                                              ),
-                                            tasks.TaskEnvironmentVariable(
                                                   name="AWS_REGION",
                                                   value=region
                                               ),
@@ -177,14 +212,14 @@ class PDFAccessibility(Stack):
                                       propagated_tag_source=ecs.PropagatedTagSource.TASK_DEFINITION,
                                      )
 
-        ecs_task_2 = tasks.EcsRunTask(self, "ECS RunTask (1)",
+        alt_text_generation_task = tasks.EcsRunTask(self, "RunAltTextGenerationTask",
                                       integration_pattern=sfn.IntegrationPattern.RUN_JOB,
-                                      cluster=cluster,
-                                      task_definition=task_definition_2,
+                                      cluster=pdf_remediation_cluster,
+                                      task_definition=alt_text_task_def,
                                       assign_public_ip=False,
                                     
                                       container_overrides=[tasks.ContainerOverride(
-                                          container_definition=container_definition_2,
+                                          container_definition=alt_text_container_def,
                                           environment=[
                                               tasks.TaskEnvironmentVariable(
                                                   name="S3_BUCKET_NAME",
@@ -207,37 +242,37 @@ class PDFAccessibility(Stack):
                                       )
 
         # Step Function Map State
-        map_state = sfn.Map(self, "Map",
+        pdf_chunks_map_state = sfn.Map(self, "ProcessPdfChunksInParallel",
                             max_concurrency=100,
                             items_path=sfn.JsonPath.string_at("$.chunks"),
                             result_path="$.MapResults")
 
-        map_state.iterator(ecs_task_1.next(ecs_task_2))
+        pdf_chunks_map_state.iterator(adobe_autotag_task.next(alt_text_generation_task))
 
-        cloudwatch_logs_policy = iam.PolicyStatement(
+        cloudwatch_metrics_policy = iam.PolicyStatement(
                     actions=["cloudwatch:PutMetricData"],  # Allow PutMetricData action
                     resources=["*"],  # All CloudWatch resources # All CloudWatch Logs resources
         )
-        java_lambda = lambda_.Function(
-            self, 'JavaLambda',
+        pdf_merger_lambda = lambda_.Function(
+            self, 'PdfMergerLambda',
             runtime=lambda_.Runtime.JAVA_21,
             handler='com.example.App::handleRequest',
-            code=lambda_.Code.from_asset('lambda/java_lambda/PDFMergerLambda/target/PDFMergerLambda-1.0-SNAPSHOT.jar'),
+            code=lambda_.Code.from_asset('lambda/pdf-merger-lambda/PDFMergerLambda/target/PDFMergerLambda-1.0-SNAPSHOT.jar'),
             environment={
-                'BUCKET_NAME': bucket.bucket_name  # this line sets the environment variable
+                'BUCKET_NAME': pdf_processing_bucket.bucket_name  # this line sets the environment variable
             },
             timeout=Duration.seconds(900),
             memory_size=1024
         )
 
-        java_lambda.add_to_role_policy(cloudwatch_logs_policy)
-        java_lambda_task = tasks.LambdaInvoke(self, "Invoke Java Lambda",
-                                      lambda_function=java_lambda,
+        pdf_merger_lambda.add_to_role_policy(cloudwatch_metrics_policy)
+        pdf_merger_lambda_task = tasks.LambdaInvoke(self, "MergePdfChunks",
+                                      lambda_function=pdf_merger_lambda,
                                       payload=sfn.TaskInput.from_object({
         "fileNames.$": "$.chunks[*].s3_key"
                      }),
                                       output_path=sfn.JsonPath.string_at("$.Payload"))
-        bucket.grant_read_write(java_lambda)
+        pdf_processing_bucket.grant_read_write(pdf_merger_lambda)
 
         # Define the Add Title Lambda function
         host_machine = platform.machine().lower()
@@ -247,11 +282,11 @@ class PDFAccessibility(Stack):
         else:
             lambda_arch = lambda_.Architecture.X86_64
 
-        add_title_lambda = lambda_.Function(
-            self, 'AddTitleLambda',
+        title_generator_lambda = lambda_.Function(
+            self, 'BedrockTitleGeneratorLambda',
             runtime=lambda_.Runtime.PYTHON_3_12,
-            handler='myapp.lambda_handler',
-            code=lambda_.Code.from_docker_build('lambda/add_title'),
+            handler='title_generator.lambda_handler',
+            code=lambda_.Code.from_docker_build('lambda/title-generator-lambda'),
             timeout=Duration.seconds(900),
             memory_size=1024,
             # architecture=lambda_.Architecture.ARM_64
@@ -259,141 +294,143 @@ class PDFAccessibility(Stack):
         )
 
         # Grant the Lambda function read/write permissions to the S3 bucket
-        bucket.grant_read_write(add_title_lambda)
+        pdf_processing_bucket.grant_read_write(title_generator_lambda)
 
         # Define the task to invoke the Add Title Lambda function
-        add_title_lambda_task = tasks.LambdaInvoke(
-            self, "Invoke Add Title Lambda",
-            lambda_function=add_title_lambda,
+        title_generator_lambda_task = tasks.LambdaInvoke(
+            self, "GenerateAccessibleTitle",
+            lambda_function=title_generator_lambda,
             payload=sfn.TaskInput.from_object({
                 "Payload.$": "$"
             })
         )
 
         # Add the necessary policy to the Lambda function's role
-        add_title_lambda.add_to_role_policy(cloudwatch_logs_policy)
-        add_title_lambda.add_to_role_policy(iam.PolicyStatement(
-            actions=["bedrock:*"],  # Adjust based on the specific Bedrock actions required
+        title_generator_lambda.add_to_role_policy(cloudwatch_metrics_policy)
+        
+        # Bedrock permissions for title generation models
+        title_generator_lambda.add_to_role_policy(iam.PolicyStatement(
+            actions=["bedrock:InvokeModel"],
             resources=["*"],
         ))
 
         # Chain the tasks in the state machine
-        # chain = map_state.next(java_lambda_task).next(add_title_lambda_task)
+        # chain = pdf_chunks_map_state.next(pdf_merger_lambda_task).next(title_generator_lambda_task)
         
-        a11y_precheck = lambda_.Function(
-            self,'accessibility_checker_before_remidiation',
+        pre_remediation_accessibility_checker = lambda_.Function(
+            self,'PreRemediationAccessibilityAuditor',
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler='main.lambda_handler',
-            code=lambda_.Code.from_docker_build('lambda/accessibility_checker_before_remidiation'),
+            code=lambda_.Code.from_docker_build('lambda/pre-remediation-accessibility-checker'),
             timeout=Duration.seconds(900),
             memory_size=512,
             architecture=lambda_arch,
         )
         
-        a11y_precheck.add_to_role_policy(
+        pre_remediation_accessibility_checker.add_to_role_policy(
             iam.PolicyStatement(
             actions=["secretsmanager:GetSecretValue"],
             resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/*"]
         ))
-        bucket.grant_read_write(a11y_precheck)
-        a11y_precheck.add_to_role_policy(cloudwatch_logs_policy)
+        pdf_processing_bucket.grant_read_write(pre_remediation_accessibility_checker)
+        pre_remediation_accessibility_checker.add_to_role_policy(cloudwatch_metrics_policy)
 
-        a11y_precheck_lambda_task = tasks.LambdaInvoke(
+        pre_remediation_accessibility_checker_task = tasks.LambdaInvoke(
             self, 
-            "a11y_precheck",
-            lambda_function=a11y_precheck,
+            "AuditPreRemediationAccessibility",
+            lambda_function=pre_remediation_accessibility_checker,
             payload=sfn.TaskInput.from_json_path_at("$"),
             output_path="$.Payload"
         )
 
-        a11y_postcheck = lambda_.Function(
-            self,'accessibility_checker_after_remidiation',
+        post_remediation_accessibility_checker = lambda_.Function(
+            self,'PostRemediationAccessibilityAuditor',
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler='main.lambda_handler',
-            code=lambda_.Code.from_docker_build('lambda/accessability_checker_after_remidiation'),
+            code=lambda_.Code.from_docker_build('lambda/post-remediation-accessibility-checker'),
             timeout=Duration.seconds(900),
             memory_size=512,
             architecture=lambda_arch,
         )
         
-        a11y_postcheck.add_to_role_policy(
+        post_remediation_accessibility_checker.add_to_role_policy(
             iam.PolicyStatement(
             actions=["secretsmanager:GetSecretValue"],
             resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/*"]
         ))
-        bucket.grant_read_write(a11y_postcheck)
-        a11y_postcheck.add_to_role_policy(cloudwatch_logs_policy)
+        pdf_processing_bucket.grant_read_write(post_remediation_accessibility_checker)
+        post_remediation_accessibility_checker.add_to_role_policy(cloudwatch_metrics_policy)
 
-        a11y_postcheck_lambda_task = tasks.LambdaInvoke(
+        post_remediation_accessibility_checker_task = tasks.LambdaInvoke(
             self, 
-            "a11y_postcheck",
-            lambda_function=a11y_postcheck,
+            "AuditPostRemediationAccessibility",
+            lambda_function=post_remediation_accessibility_checker,
             payload=sfn.TaskInput.from_json_path_at("$"),
             output_path="$.Payload"
         )
         
-        chain = map_state.next(java_lambda_task).next(add_title_lambda_task).next(a11y_postcheck_lambda_task)
+        remediation_chain = pdf_chunks_map_state.next(pdf_merger_lambda_task).next(title_generator_lambda_task).next(post_remediation_accessibility_checker_task)
 
-        parallel_state = sfn.Parallel(self, "ParallelState",
+        parallel_accessibility_workflow = sfn.Parallel(self, "ParallelAccessibilityWorkflow",
                                       result_path="$.ParallelResults")
-        parallel_state.branch(chain)
-        parallel_state.branch(a11y_precheck_lambda_task)
+        parallel_accessibility_workflow.branch(remediation_chain)
+        parallel_accessibility_workflow.branch(pre_remediation_accessibility_checker_task)
 
-        log_group_stepfunctions = logs.LogGroup(self, "StepFunctionLogs",
-            log_group_name="/aws/states/MyStateMachine_PDFAccessibility",
-            retention=logs.RetentionDays.ONE_WEEK,
+        pdf_remediation_workflow_log_group = logs.LogGroup(self, "PdfRemediationWorkflowLogs",
+            log_group_name="/aws/states/pdf-accessibility-remediation-workflow",
+            retention=logs.RetentionDays.ONE_MONTH,
             removal_policy=cdk.RemovalPolicy.DESTROY
         )
         # State Machine
 
-        state_machine = sfn.StateMachine(self, "MyStateMachine",
-                                         definition=parallel_state,
+        pdf_remediation_state_machine = sfn.StateMachine(self, "PdfAccessibilityRemediationWorkflow",
+                                         definition=parallel_accessibility_workflow,
                                          timeout=Duration.minutes(150),
                                          logs=sfn.LogOptions(
-                                             destination=log_group_stepfunctions,
+                                             destination=pdf_remediation_workflow_log_group,
                                              level=sfn.LogLevel.ALL
                                          ))
         
         # Lambda Function
-        split_pdf_lambda = lambda_.Function(
-            self, 'SplitPDF',
+        pdf_splitter_lambda = lambda_.Function(
+            self, 'PdfChunkSplitterLambda',
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler='main.lambda_handler',
-            code=lambda_.Code.from_docker_build("lambda/split_pdf"),
+            code=lambda_.Code.from_docker_build("lambda/pdf-splitter-lambda"),
             timeout=Duration.seconds(900),
             memory_size=1024
         )
 
-        split_pdf_lambda.add_to_role_policy(cloudwatch_logs_policy)
+        pdf_splitter_lambda.add_to_role_policy(cloudwatch_metrics_policy)
 
         # S3 Permissions for Lambda
-        bucket.grant_read_write(split_pdf_lambda)
+        pdf_processing_bucket.grant_read_write(pdf_splitter_lambda)
 
         # Trigger Lambda on S3 Event
-        bucket.add_event_notification(
+        pdf_processing_bucket.add_event_notification(
             s3.EventType.OBJECT_CREATED,
-            s3n.LambdaDestination(split_pdf_lambda),
+            s3n.LambdaDestination(pdf_splitter_lambda),
             s3.NotificationKeyFilter(prefix="pdf/"),
             s3.NotificationKeyFilter(suffix=".pdf")
         )
 
         # Step Function Execution Permissions
-        state_machine.grant_start_execution(split_pdf_lambda)
+        pdf_remediation_state_machine.grant_start_execution(pdf_splitter_lambda)
 
         # Pass State Machine ARN to Lambda as an Environment Variable
-        split_pdf_lambda.add_environment("STATE_MACHINE_ARN", state_machine.state_machine_arn)
+        pdf_splitter_lambda.add_environment("STATE_MACHINE_ARN", pdf_remediation_state_machine.state_machine_arn)
         # Store log group names dynamically
-        split_pdf_lambda_log_group_name = f"/aws/lambda/{split_pdf_lambda.function_name}"
-        java_lambda_log_group_name = f"/aws/lambda/{java_lambda.function_name}"
-        add_title_lambda_log_group_name = f"/aws/lambda/{add_title_lambda.function_name}"
-        accessibility_checker_pre_log_group_name = f"/aws/lambda/{a11y_precheck.function_name}"
-        accessibility_checker_post_log_group_name = f"aws/lambda/{a11y_postcheck.function_name}"
+        pdf_splitter_lambda_log_group_name = f"/aws/lambda/{pdf_splitter_lambda.function_name}"
+        pdf_merger_lambda_log_group_name = f"/aws/lambda/{pdf_merger_lambda.function_name}"
+        title_generator_lambda_log_group_name = f"/aws/lambda/{title_generator_lambda.function_name}"
+        pre_remediation_checker_log_group_name = f"/aws/lambda/{pre_remediation_accessibility_checker.function_name}"
+        post_remediation_checker_log_group_name = f"aws/lambda/{post_remediation_accessibility_checker.function_name}"
 
 
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         dashboard_name = f"PDF_Processing_Dashboard-{timestamp}"
-        dashboard = cloudwatch.Dashboard(self, "PDF_Processing_Dashboard", dashboard_name=dashboard_name,
+        dashboard = cloudwatch.Dashboard(self, "PdfRemediationMonitoringDashboard", dashboard_name=dashboard_name,
                                          variables=[cloudwatch.DashboardVariable(
                                             id="filename",
                                             type=cloudwatch.VariableType.PATTERN,
@@ -408,7 +445,7 @@ class PDFAccessibility(Stack):
         dashboard.add_widgets(
             cloudwatch.LogQueryWidget(
                 title="File status",
-                log_group_names=[split_pdf_lambda_log_group_name, java_lambda_log_group_name, python_container_log_group.log_group_name,  javascript_container_log_group.log_group_name],
+                log_group_names=[pdf_splitter_lambda_log_group_name, pdf_merger_lambda_log_group_name, adobe_autotag_log_group.log_group_name,  alt_text_generator_log_group.log_group_name],
                 query_string='''fields @timestamp, @message
                     | parse @message "File: *, Status: *" as file, status
                     | stats latest(status) as latestStatus by file
@@ -418,7 +455,7 @@ class PDFAccessibility(Stack):
             ),
             cloudwatch.LogQueryWidget(
                 title="Split PDF Lambda Logs",
-                log_group_names=[split_pdf_lambda_log_group_name],
+                log_group_names=[pdf_splitter_lambda_log_group_name],
                 query_string='''fields @message 
                                 | filter @message like /filename/''',
                 width=24,
@@ -426,31 +463,31 @@ class PDFAccessibility(Stack):
             ),
             cloudwatch.LogQueryWidget(
                 title="Step Function Execution Logs",
-                log_group_names=[log_group_stepfunctions.log_group_name],
+                log_group_names=[pdf_remediation_workflow_log_group.log_group_name],
                 query_string='''fields @message 
                                 | filter @message like /filename/''',
                 width=24,
                 height=6
             ),
             cloudwatch.LogQueryWidget(
-                title="ECS TASK 1 ADOBE AUTOTAG AND EXTRACT LOGS",
-                log_group_names=[python_container_log_group.log_group_name],
+                title="Adobe Autotag Processing Logs",
+                log_group_names=[adobe_autotag_log_group.log_group_name],
                 query_string='''fields @message 
                                 | filter @message like /filename/''',
                 width=24,
                 height=6
             ),
             cloudwatch.LogQueryWidget(
-                title="ECS TASK 2 LLM alt text generation",
-                log_group_names=[javascript_container_log_group.log_group_name],
+                title="Alt Text Generation Logs",
+                log_group_names=[alt_text_generator_log_group.log_group_name],
                 query_string='''fields @message 
                                 | filter @message like /filename/''',
                 width=24,
                 height=6
             ),
             cloudwatch.LogQueryWidget(
-                title="Java Lambda Logs for PDF Merger",
-                log_group_names=[java_lambda_log_group_name],
+                title="PDF Merger Lambda Logs",
+                log_group_names=[pdf_merger_lambda_log_group_name],
                 query_string='''fields @message 
                                 | filter @message like /filename/''',
                 width=24,
