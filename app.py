@@ -39,6 +39,7 @@ class PDFAccessibility(Stack):
         s3deploy.BucketDeployment(self, "CreatePdfFolder",
             sources=[s3deploy.Source.data("pdf/.keep", "")],
             destination_bucket=pdf_processing_bucket,
+            prune=False,
         )
         
         # Get account and region for use throughout the stack
