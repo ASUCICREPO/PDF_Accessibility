@@ -1,11 +1,12 @@
 # PDF Accessibility Solutions
 
-This repository provides two complementary solutions for PDF accessibility:
+This repository provides multiple complementary solutions for PDF accessibility:
 
 1. **PDF-to-PDF Remediation**: Processes PDFs and maintains the PDF format while improving accessibility.
 2. **PDF-to-HTML Remediation**: Converts PDFs to accessible HTML format.
+3. **Local Batch Processor**: Offline batch processing for OCR and PDF/UA-1 preparation (see [local_batch_processor/](local_batch_processor/README.md)).
 
-Both solutions leverage AWS services and generative AI to improve content accessibility according to WCAG 2.1 Level AA standards.
+The AWS-based solutions leverage AWS services and generative AI to improve content accessibility according to WCAG 2.1 Level AA standards. The local batch processor provides offline processing capabilities for pre-processing, testing, or environments without AWS access.
 
 ## Disclaimers
 
@@ -40,6 +41,7 @@ All work produced is open source. More information can be found in the GitHub re
 | [Testing Your PDF Accessibility Solution](#testing-your-pdf-accessibility-solution) | User guide for the working solution                     |
 | [PDF-to-PDF Remediation Solution](#pdf-to-pdf-remediation-solution)                 | PDF format preservation solution details                |
 | [PDF-to-HTML Remediation Solution](#pdf-to-html-remediation-solution)               | HTML conversion solution details                        |
+| [Local Batch Processor](#local-batch-processor)                                     | Offline batch processing for OCR and PDF/UA preparation |
 | [Monitoring](#monitoring)                                                           | System monitoring and observability                     |
 | [Troubleshooting](#troubleshooting)                                                 | Common issues and solutions                             |
 | [Contributing](#contributing)                                                       | How to contribute to the project                        |
@@ -207,6 +209,41 @@ This solution converts PDF documents to accessible HTML format while preserving 
 - **Lambda Function**: Processes PDFs using containerized accessibility utility
 - **ECR Repository**: Hosts the Docker image for Lambda
 - **Bedrock Data Automation**: Provides PDF parsing and extraction capabilities
+
+## Local Batch Processor
+
+### Overview
+
+The local batch processor provides offline batch processing capabilities for PDF accessibility enhancement. It's designed to complement the AWS-based solutions by enabling:
+
+- **Offline processing** without AWS infrastructure
+- **Pre-processing** before cloud upload
+- **Development/testing** workflows
+- **High-volume batch jobs** with folder structure preservation
+
+### Features
+
+- **OCR Enhancement**: Adds invisible searchable text layers using Tesseract
+- **PDF/UA-1 Preparation**: Adds compliance metadata and markers
+- **Batch Processing**: Process directory trees with structure preservation
+- **Parallel Processing**: Multi-threaded for faster throughput
+- **Progress Tracking**: Visual progress bar and JSON summary reports
+
+### Quick Start
+
+```bash
+# Install dependencies
+cd local_batch_processor
+pip install -r requirements.txt
+
+# Process a single file
+python -m local_batch_processor.cli process input.pdf output.pdf
+
+# Batch process a directory (4 parallel workers)
+python -m local_batch_processor.cli batch input_folder/ output_folder/ --workers 4
+```
+
+For detailed documentation, see [local_batch_processor/README.md](local_batch_processor/README.md).
 
 ## Monitoring
 

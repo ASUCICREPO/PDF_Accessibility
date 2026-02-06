@@ -1,0 +1,11 @@
+# Core dependencies
+PyMuPDF>=1.23.0
+pikepdf>=8.0.0
+ocrmypdf>=15.0.0
+
+# CLI (optional but recommended)
+typer>=0.9.0
+rich>=13.0.0
+
+# Progress tracking (optional)
+tqdm>=4.65.0
