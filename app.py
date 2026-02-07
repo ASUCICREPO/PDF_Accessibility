@@ -28,19 +28,14 @@ class PDFAccessibility(Stack):
         pdf_processing_bucket = s3.Bucket(self, "pdfaccessibilitybucket1", 
                           encryption=s3.BucketEncryption.S3_MANAGED, 
                           enforce_ssl=True,
+                          versioned=True,
+                          removal_policy=cdk.RemovalPolicy.RETAIN,
                           cors=[s3.CorsRule(
                               allowed_headers=["*"],
                               allowed_methods=[s3.HttpMethods.GET, s3.HttpMethods.HEAD, s3.HttpMethods.PUT, s3.HttpMethods.POST, s3.HttpMethods.DELETE],
                               allowed_origins=["*"],
                               exposed_headers=[]
                           )])
-    
-        # Create pdf/ folder in the bucket
-        s3deploy.BucketDeployment(self, "CreatePdfFolder",
-            sources=[s3deploy.Source.data("pdf/.keep", "")],
-            destination_bucket=pdf_processing_bucket,
-            prune=False,
-        )
         
         # Get account and region for use throughout the stack
         account_id = Stack.of(self).account
