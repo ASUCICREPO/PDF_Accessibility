@@ -297,6 +297,12 @@ EOF
                         "Effect": "Allow",
                         "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:PutParameter"],
                         "Resource": "arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"
+                    },
+                    {
+                        "Sid": "CodeConnectionsAccess",
+                        "Effect": "Allow",
+                        "Action": ["codeconnections:UseConnection", "codeconnections:GetConnection"],
+                        "Resource": "arn:aws:codeconnections:*:*:connection/*"
                     }
                 ]
             }'
@@ -372,6 +378,12 @@ EOF
                         "Effect": "Allow",
                         "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:PutParameter"],
                         "Resource": "arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"
+                    },
+                    {
+                        "Sid": "CodeConnectionsAccess",
+                        "Effect": "Allow",
+                        "Action": ["codeconnections:UseConnection", "codeconnections:GetConnection"],
+                        "Resource": "arn:aws:codeconnections:*:*:connection/*"
                     }
                 ]
             }'
