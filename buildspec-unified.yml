@@ -90,20 +90,6 @@ phases:
             echo "S3 bucket $BUCKET_NAME already exists."
           fi
           
-          # Set CORS policy (always apply, whether bucket is new or existing)
-          echo "Setting CORS policy for bucket..."
-          aws s3api put-bucket-cors --bucket $BUCKET_NAME --cors-configuration '{
-            "CORSRules": [
-              {
-                "AllowedHeaders": ["*"],
-                "AllowedMethods": ["GET", "HEAD", "PUT", "POST", "DELETE"],
-                "AllowedOrigins": ["*"],
-                "ExposeHeaders": []
-              }
-            ]
-          }'
-          echo "CORS policy applied successfully."
-          
           # Create ECR repository if it doesn't exist
           REPO_NAME="pdf2html-lambda"
           if ! aws ecr describe-repositories --repository-names $REPO_NAME --region $REGION 2>/dev/null; then
