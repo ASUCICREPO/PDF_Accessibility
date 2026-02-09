@@ -40,6 +40,7 @@ All work produced is open source. More information can be found in the GitHub re
 | [Testing Your PDF Accessibility Solution](#testing-your-pdf-accessibility-solution) | User guide for the working solution                     |
 | [PDF-to-PDF Remediation Solution](#pdf-to-pdf-remediation-solution)                 | PDF format preservation solution details                |
 | [PDF-to-HTML Remediation Solution](#pdf-to-html-remediation-solution)               | HTML conversion solution details                        |
+| [Configuring Limits](docs/CONFIGURING_LIMITS.md)                                   | How to modify document limits, quotas, and defaults     |
 | [Monitoring](#monitoring)                                                           | System monitoring and observability                     |
 | [Troubleshooting](#troubleshooting)                                                 | Common issues and solutions                             |
 | [Contributing](#contributing)                                                       | How to contribute to the project                        |
