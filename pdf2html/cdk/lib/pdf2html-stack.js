@@ -82,12 +82,14 @@ class Pdf2HtmlStack extends Stack {
     }));
     
     // Bedrock Data Automation profile access (required for BDA operations)
+    // Note: BDA uses managed profiles (e.g. us.data-automation-v1) that may reside
+    // in a different region (us-east-1), so we use wildcard for region
     lambdaRole.addToPolicy(new iam.PolicyStatement({
       actions: [
         'bedrock:InvokeDataAutomationAsync',
       ],
       resources: [
-        `arn:aws:bedrock:${this.region}:${this.account}:data-automation-profile/*`,
+        `arn:aws:bedrock:*:${this.account}:data-automation-profile/*`,
       ],
     }));
     

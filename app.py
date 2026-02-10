@@ -29,13 +29,7 @@ class PDFAccessibility(Stack):
                           encryption=s3.BucketEncryption.S3_MANAGED, 
                           enforce_ssl=True,
                           versioned=True,
-                          removal_policy=cdk.RemovalPolicy.RETAIN,
-                          cors=[s3.CorsRule(
-                              allowed_headers=["*"],
-                              allowed_methods=[s3.HttpMethods.GET, s3.HttpMethods.HEAD, s3.HttpMethods.PUT, s3.HttpMethods.POST, s3.HttpMethods.DELETE],
-                              allowed_origins=["*"],
-                              exposed_headers=[]
-                          )])
+                          removal_policy=cdk.RemovalPolicy.RETAIN)
         
         # Get account and region for use throughout the stack
         account_id = Stack.of(self).account
