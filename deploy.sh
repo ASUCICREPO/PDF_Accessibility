@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # ========================================================================
 # 🚀 PDF Accessibility Solutions - Unified Deployment Script! 🚀
