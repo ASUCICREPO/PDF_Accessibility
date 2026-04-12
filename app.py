@@ -201,6 +201,12 @@ class PDFAccessibility(Stack):
                                       ),
                                       propagated_tag_source=ecs.PropagatedTagSource.TASK_DEFINITION,
                                      )
+        
+        # Disable default retries so damaged/complex PDFs fail fast
+        adobe_autotag_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=0
+        )
 
         alt_text_generation_task = tasks.EcsRunTask(self, "RunAltTextGenerationTask",
                                       integration_pattern=sfn.IntegrationPattern.RUN_JOB,
@@ -230,6 +236,12 @@ class PDFAccessibility(Stack):
                                       ),
                                       propagated_tag_source=ecs.PropagatedTagSource.TASK_DEFINITION,
                                       )
+
+        # Disable default retries so failures fail fast
+        alt_text_generation_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=0
+        )
 
         # Step Function Map State
         pdf_chunks_map_state = sfn.Map(self, "ProcessPdfChunksInParallel",
