@@ -378,6 +378,31 @@ class PDFAccessibility(Stack):
         parallel_accessibility_workflow.branch(remediation_chain)
         parallel_accessibility_workflow.branch(pre_remediation_accessibility_checker_task)
 
+        # Error handler Lambda — writes failure marker to S3 so frontend stops polling
+        error_handler_lambda = lambda_.Function(
+            self, 'WorkflowErrorHandlerLambda',
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler='main.lambda_handler',
+            code=lambda_.Code.from_asset('lambda/error-handler-lambda'),
+            timeout=Duration.seconds(30),
+            memory_size=128,
+            architecture=lambda_arch,
+        )
+        pdf_processing_bucket.grant_write(error_handler_lambda)
+
+        error_handler_task = tasks.LambdaInvoke(
+            self, "HandleWorkflowError",
+            lambda_function=error_handler_lambda,
+            output_path="$.Payload"
+        )
+
+        # Catch any error in the parallel workflow and route to error handler
+        parallel_accessibility_workflow.add_catch(
+            error_handler_task,
+            errors=["States.ALL"],
+            result_path="$.errorInfo"
+        )
+
         pdf_remediation_workflow_log_group = logs.LogGroup(self, "PdfRemediationWorkflowLogs",
             log_group_name="/aws/states/pdf-accessibility-remediation-workflow",
             retention=logs.RetentionDays.ONE_MONTH,
