@@ -177,6 +177,49 @@ def add_viewer_preferences(pdf_path, filename):
         writer.write(f)
     logger.info(f'Filename : {filename} | Viewer preferences added to the PDF')
 
+def poll_job_until_done(pdf_services, location, result_type, filename, job_name):
+    """
+    Polls Adobe PDF Services job status until completion or failure.
+    Unlike get_job_result(), this detects 'failed' status immediately
+    instead of hanging indefinitely on damaged or complex PDFs.
+
+    Args:
+        pdf_services: PDFServices instance.
+        location: Polling URL returned by submit().
+        result_type: Expected result class (e.g. AutotagPDFResult).
+        filename: Filename for logging.
+        job_name: Human-readable job name for logging (e.g. "Autotag").
+
+    Returns:
+        PDFServicesResponse on success.
+
+    Raises:
+        ServiceApiException: If the job fails on Adobe's side.
+    """
+    import time
+    from adobe.pdfservices.operation.pdf_services_job_status import PDFServicesJobStatus
+
+    while True:
+        status_response = pdf_services.get_job_status(location)
+        status = status_response.get_status()
+
+        if status == PDFServicesJobStatus.DONE.get_value():
+            logging.info(f'Filename : {filename} | Adobe {job_name} job completed, fetching result...')
+            return pdf_services.get_job_result(location, result_type)
+
+        if status == PDFServicesJobStatus.FAILED.get_value():
+            raise ServiceApiException(
+                message=f"Adobe {job_name} API job failed - PDF may be damaged or too complex",
+                status_code=400
+            )
+
+        # Still in progress — wait the interval Adobe tells us to
+        retry_interval = status_response.get_retry_interval()
+        wait_time = retry_interval if retry_interval > 0 else 1
+        logging.info(f'Filename : {filename} | Adobe {job_name} job in progress, retrying in {wait_time}s...')
+        time.sleep(wait_time)
+
+
 def autotag_pdf_with_options(filename, client_id, client_secret):
     """
     Auto-tags a PDF for accessibility using Adobe PDF Services.
@@ -223,9 +266,11 @@ def autotag_pdf_with_options(filename, client_id, client_secret):
         autotag_pdf_job = AutotagPDFJob(input_asset=input_asset,
                                         autotag_pdf_params=autotag_pdf_params)
 
-        # Submit the job and gets the job result
+        # Submit the job and poll for status, catching failures immediately
         location = pdf_services.submit(autotag_pdf_job)
-        pdf_services_response = pdf_services.get_job_result(location, AutotagPDFResult)
+        pdf_services_response = poll_job_until_done(
+            pdf_services, location, AutotagPDFResult, filename, "Autotag"
+        )
 
         # Get content from the resulting asset(s)
         result_asset: CloudAsset = pdf_services_response.get_result().get_tagged_pdf()
@@ -290,9 +335,11 @@ def extract_api(filename, client_id, client_secret):
         # Creates a new job instance
         extract_pdf_job = ExtractPDFJob(input_asset=input_asset, extract_pdf_params=extract_pdf_params)
 
-        # Submit the job and gets the job result
+        # Submit the job and poll for status, catching failures immediately
         location = pdf_services.submit(extract_pdf_job)
-        pdf_services_response = pdf_services.get_job_result(location, ExtractPDFResult)
+        pdf_services_response = poll_job_until_done(
+            pdf_services, location, ExtractPDFResult, filename, "Extract"
+        )
 
         # Get content from the resulting asset(s)
         result_asset: CloudAsset = pdf_services_response.get_result().get_resource()
