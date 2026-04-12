@@ -209,8 +209,9 @@ def poll_job_until_done(pdf_services, location, result_type, filename, job_name)
 
         if status == PDFServicesJobStatus.FAILED.get_value():
             raise ServiceApiException(
-                message=f"Adobe {job_name} API job failed - PDF may be damaged or too complex",
-                status_code=400
+                f"Adobe {job_name} API job failed - PDF may be damaged or too complex",
+                "N/A",
+                400
             )
 
         # Still in progress — wait the interval Adobe tells us to
