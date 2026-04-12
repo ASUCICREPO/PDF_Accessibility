@@ -292,7 +292,7 @@ def extract_api(filename, client_id, client_secret):
 
         # Submit the job and gets the job result
         location = pdf_services.submit(extract_pdf_job)
-        pdf_services_response = pdf_services.get_job_result(location, AutotagPDFResult)
+        pdf_services_response = pdf_services.get_job_result(location, ExtractPDFResult)
 
         # Get content from the resulting asset(s)
         result_asset: CloudAsset = pdf_services_response.get_result().get_resource()
