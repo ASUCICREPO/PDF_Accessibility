@@ -264,6 +264,8 @@ This solution converts PDF documents to accessible HTML format while preserving 
 
 Contributions to this project are welcome. Please fork the repository and submit a pull request with your changes.
 
+We encourage you to use the [Issues](https://github.com/ASUCICREPO/PDF_Accessibility/issues) section to report bugs or suggest enhancements for the solution. We also welcome community members to comment on existing issues to help us identify and prioritize the features most in demand.
+
 ## Acknowledgments
 
 The PDF-to-HTML remediation functionality in this project is adapted from AWS Labs' [Content Accessibility Utility on AWS](https://github.com/awslabs/content-accessibility-utility-on-aws). This version includes updates and enhancements tailored for integration within the PDF Accessibility backend.
