@@ -91,6 +91,62 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 s3 = boto3.client('s3')
 
+# Pages per chunk -- must match the PDF splitter Lambda so reported page ranges
+# are accurate. Each chunk N covers pages (N-1)*PAGES_PER_CHUNK+1 .. N*PAGES_PER_CHUNK.
+PAGES_PER_CHUNK = int(os.environ.get('PAGES_PER_CHUNK', '200'))
+
+
+def _chunk_index_from_key(chunk_key):
+    """Extract the 1-based chunk index from a key like '.../<name>_chunk_8.pdf'."""
+    try:
+        match = re.search(r'_chunk_(\d+)\.pdf$', chunk_key or '')
+        return int(match.group(1)) if match else None
+    except Exception:
+        return None
+
+
+def report_failure(bucket_name, file_base_name, chunk_key, reason_category, message):
+    """Write a structured failure-detail file the Step Functions failure-handler
+    aggregates into the user-facing result/FAILED_<name>.json marker.
+
+    Station: 'adobe' (Adobe AutoTag/Extract). This carries the WHY (reason
+    category) and the WHERE (chunk index + page range) that only this station
+    knows. Best-effort and exception-proof: reporting a failure must never throw
+    a second failure that masks the original error.
+    """
+    chunk_index = _chunk_index_from_key(chunk_key)
+    page_start = ((chunk_index - 1) * PAGES_PER_CHUNK + 1) if chunk_index else None
+    page_end = (chunk_index * PAGES_PER_CHUNK) if chunk_index else None
+
+    # Structured CloudWatch line for the dashboard "File status" widget.
+    pages_desc = f" | chunk={chunk_index} | pages={page_start}-{page_end}" if chunk_index else ""
+    logger.error(
+        f"File: {file_base_name}, Status: FAILED | station=adobe | "
+        f"reason={reason_category}{pages_desc} | {message}"
+    )
+
+    if not bucket_name or not file_base_name:
+        return
+    detail = {
+        "station": "adobe",
+        "reason_category": reason_category,
+        "message": str(message)[:2000],
+        "chunk_index": chunk_index,
+        "page_start": page_start,
+        "page_end": page_end,
+    }
+    try:
+        suffix = chunk_index if chunk_index is not None else "unknown"
+        s3.put_object(
+            Bucket=bucket_name,
+            Key=f"temp/{file_base_name}/_errors/adobe_chunk_{suffix}.json",
+            Body=json.dumps(detail).encode("utf-8"),
+            ContentType="application/json",
+        )
+    except Exception as e:  # noqa: BLE001 - never mask the original failure
+        logger.error(f"Filename : {file_base_name} | Could not write failure detail: {e}")
+
+
 def download_file_from_s3(bucket_name,file_base_name, file_key, local_path):
     """
     Download a file from an S3 bucket.
@@ -640,11 +696,12 @@ def main():
     """
     file_key = None
     file_base_name = None
-    
-    try:    
-        bucket_name = os.getenv('S3_BUCKET_NAME')
+    s3_file_key = None
+    bucket_name = os.getenv('S3_BUCKET_NAME')
+
+    try:
         s3_file_key = os.getenv('S3_FILE_KEY')
-        
+
         if not bucket_name or not s3_file_key:
             logging.error("Error: S3_BUCKET_NAME and S3_FILE_KEY environment variables are required.")
             sys.exit(1)
@@ -717,18 +774,22 @@ def main():
     except (ServiceApiException, ServiceUsageException, SdkException) as e:
         logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - Adobe API Error")
         logger.error(f"Filename : {file_key} | Adobe API Error: {e}")
+        report_failure(bucket_name, file_base_name, s3_file_key, "ADOBE_API", f"Adobe API error: {e}")
         sys.exit(1)
     except ClientError as e:
         logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - AWS Error")
         logger.error(f"Filename : {file_key} | AWS Error: {e}")
+        report_failure(bucket_name, file_base_name, s3_file_key, "INFRA", f"AWS error: {e}")
         sys.exit(1)
     except FileNotFoundError as e:
         logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - File Not Found")
         logger.error(f"Filename : {file_key} | File Not Found Error: {e}")
+        report_failure(bucket_name, file_base_name, s3_file_key, "ADOBE_API", f"Expected Adobe output not found: {e}")
         sys.exit(1)
     except Exception as e:
         logger.error(f"File: {file_base_name}, Status: Failed in First ECS task")
         logger.error(f"Filename : {file_key} | Unexpected Error: {e}")
+        report_failure(bucket_name, file_base_name, s3_file_key, "UNKNOWN", f"Unexpected error: {e}")
         sys.exit(1)
         
 if __name__ == "__main__":
