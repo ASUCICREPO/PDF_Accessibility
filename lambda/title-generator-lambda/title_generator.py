@@ -5,6 +5,33 @@ import time
 import random
 import fitz  # PyMuPDF
 
+
+def report_failure(bucket, file_basename, reason_category, message):
+    """Write a station failure-detail file that the Step Functions failure-handler
+    aggregates into the user-facing result/FAILED_<name>.json marker. Station: 'title'.
+
+    The title generator runs inside the state machine, so the Step Functions Catch
+    is the ultimate safety net; this detail file simply gives the user the precise
+    reason. Best-effort and exception-proof.
+    """
+    print(f"File: {file_basename}, Status: FAILED | station=title | reason={reason_category} | {message}")
+    if not bucket or not file_basename:
+        return
+    detail = {
+        "station": "title",
+        "reason_category": reason_category,
+        "message": str(message)[:2000],
+    }
+    try:
+        boto3.client('s3').put_object(
+            Bucket=bucket,
+            Key=f"temp/{file_basename}/_errors/title.json",
+            Body=json.dumps(detail).encode("utf-8"),
+            ContentType="application/json",
+        )
+    except Exception as e:
+        print(f"Filename: {file_basename} | Could not write failure detail: {e}")
+
 # Helper function for exponential backoff and retry
 def exponential_backoff_retry(
     func,
@@ -199,12 +226,16 @@ def generate_title(extracted_text, current_title):
 
 
 def lambda_handler(event, context):
+    file_info = {}
+    file_basename = None
     try:
         payload = event.get("Payload")
         file_info = parse_payload(payload)
         print(f"(lambda_handler | Parsed file information: {file_info})")
 
         file_name = file_info['merged_file_name']
+        # Folder basename matches temp/<basename>/ created upstream (no extension).
+        file_basename = file_name.rsplit('.', 1)[0]
         local_path = f'/tmp/{file_name}'
         download_file_from_s3(file_info['bucket'], file_info['merged_file_key'], local_path, file_info['merged_file_name'])
 
@@ -212,13 +243,8 @@ def lambda_handler(event, context):
             pdf_document = fitz.open(local_path)
         except Exception as e:
             print(f"(lambda_handler | Failed to open PDF file {file_name}: {e})")
-            return {
-                "statusCode": 500,
-                "body": {
-                    "error": f"Failed to open PDF file {file_name}.",
-                    "details": f"{file_name} - {str(e)}"
-                }
-            }
+            report_failure(file_info.get('bucket'), file_basename, "TITLE", f"Failed to open merged PDF: {e}")
+            raise
 
         try:
             extracted_text = extract_text_from_pdf(pdf_document)
@@ -226,13 +252,8 @@ def lambda_handler(event, context):
         except Exception as e:
             print(f"(lambda_handler | Failed to extract text from PDF: {e})")
             pdf_document.close()
-            return {
-                "statusCode": 500,
-                "body": {
-                    "error": "Failed to extract text from PDF.",
-                    "details": f"{file_name} - {str(e)}"
-                }
-            }
+            report_failure(file_info.get('bucket'), file_basename, "TITLE", f"Failed to extract text: {e}")
+            raise
 
         try:
             title = generate_title(extracted_text, file_name)
@@ -240,13 +261,8 @@ def lambda_handler(event, context):
         except Exception as e:
             print(f"(lambda_handler | Failed to generate title: {e})")
             pdf_document.close()
-            return {
-                "statusCode": 500,
-                "body": {
-                    "error": "Failed to generate title.",
-                    "details": f"{file_name} - {str(e)}"
-                }
-            }
+            report_failure(file_info.get('bucket'), file_basename, "BEDROCK_API", f"Failed to generate title via Bedrock: {e}")
+            raise
 
         try:
             set_custom_metadata(pdf_document, file_name, title)
@@ -255,26 +271,16 @@ def lambda_handler(event, context):
         except Exception as e:
             print(f"(lambda_handler | Failed to set metadata or save PDF: {e})")
             pdf_document.close()
-            return {
-                "statusCode": 500,
-                "body": {
-                    "error": "Failed to set metadata or save PDF.",
-                    "details": f"{file_name} - {str(e)}"
-                }
-            }
+            report_failure(file_info.get('bucket'), file_basename, "TITLE", f"Failed to set metadata or save PDF: {e}")
+            raise
 
         try:
             save_path = save_to_s3(local_path, file_info['bucket'], file_name)
             print(f"(lambda_handler | Saved file to S3 at: {save_path})")
         except Exception as e:
             print(f"(lambda_handler | Failed to save file to S3: {e})")
-            return {
-                "statusCode": 500,
-                "body": {
-                    "error": "Failed to save file to S3.",
-                    "details": f"{file_name} - {str(e)}"
-                }
-            }
+            report_failure(file_info.get('bucket'), file_basename, "TITLE", f"Failed to save final PDF to S3: {e}")
+            raise
 
         return {
             "statusCode": 200,
@@ -286,10 +292,8 @@ def lambda_handler(event, context):
         }
     except Exception as e:
         print(f"(lambda_handler | General error in lambda_handler: {e})")
-        return {
-            "statusCode": 500,
-            "body": {
-                "error": "An unexpected error occurred.",
-                "details": f"Filename: {file_info.get('merged_file_name','Unknown')} - {str(e)}"
-            }
-        }
+        # Report and re-raise: returning a 500 dict would be treated as SUCCESS by
+        # the Step Functions LambdaInvoke and let the workflow continue silently.
+        # Raising ensures the state machine's Catch fires and the user is notified.
+        report_failure(file_info.get('bucket'), file_basename, "TITLE", f"Unexpected error: {e}")
+        raise

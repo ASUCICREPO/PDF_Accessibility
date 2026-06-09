@@ -69,6 +69,87 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Pages per chunk -- must match the PDF splitter Lambda so reported page ranges
+// are accurate. Chunk N covers pages (N-1)*PAGES_PER_CHUNK+1 .. N*PAGES_PER_CHUNK.
+const PAGES_PER_CHUNK = parseInt(process.env.PAGES_PER_CHUNK || "200", 10);
+
+/**
+ * Writes a structured failure-detail file that the Step Functions failure-handler
+ * aggregates into the user-facing result/FAILED_<name>.json marker.
+ *
+ * Station: 'alttext' (Bedrock alt-text generation). Carries the WHY (reason
+ * category) and WHERE (chunk index + page range). Best-effort and exception-proof:
+ * reporting a failure must never throw a second failure that masks the original.
+ */
+async function reportFailure(bucketName, fileBaseName, s3FileKey, reasonCategory, message) {
+    let chunkIndex = null;
+    const match = /_chunk_(\d+)\.pdf$/.exec(s3FileKey || "");
+    if (match) chunkIndex = parseInt(match[1], 10);
+    const pageStart = chunkIndex ? (chunkIndex - 1) * PAGES_PER_CHUNK + 1 : null;
+    const pageEnd = chunkIndex ? chunkIndex * PAGES_PER_CHUNK : null;
+
+    // Structured CloudWatch line for the dashboard "File status" widget.
+    const pagesDesc = chunkIndex ? ` | chunk=${chunkIndex} | pages=${pageStart}-${pageEnd}` : "";
+    logger.error(`File: ${fileBaseName}, Status: FAILED | station=alttext | reason=${reasonCategory}${pagesDesc} | ${message}`);
+
+    if (!bucketName || !fileBaseName) return;
+    const detail = {
+        station: "alttext",
+        reason_category: reasonCategory,
+        message: String(message).slice(0, 2000),
+        chunk_index: chunkIndex,
+        page_start: pageStart,
+        page_end: pageEnd,
+    };
+    try {
+        const suffix = chunkIndex !== null ? chunkIndex : "unknown";
+        await s3Client.send(new PutObjectCommand({
+            Bucket: bucketName,
+            Key: `temp/${fileBaseName}/_errors/alttext_chunk_${suffix}.json`,
+            Body: JSON.stringify(detail),
+            ContentType: "application/json",
+        }));
+    } catch (e) {
+        logger.error(`Filename: ${fileBaseName} | Could not write failure detail: ${e.message || e}`);
+    }
+}
+
+const MAX_ASPECT_RATIO = 20;
+
+function getImageDimensions(buffer) {
+    try {
+        if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+            const width = buffer.readUInt32BE(16);
+            const height = buffer.readUInt32BE(20);
+            return { width, height };
+        }
+        if (buffer[0] === 0xFF && buffer[1] === 0xD8) {
+            let offset = 2;
+            while (offset < buffer.length - 1) {
+                if (buffer[offset] !== 0xFF) break;
+                const marker = buffer[offset + 1];
+                if (marker === 0xC0 || marker === 0xC2) {
+                    const height = buffer.readUInt16BE(offset + 5);
+                    const width = buffer.readUInt16BE(offset + 7);
+                    return { width, height };
+                }
+                const segmentLength = buffer.readUInt16BE(offset + 2);
+                offset += 2 + segmentLength;
+            }
+        }
+        return null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function isAspectRatioValid(dimensions) {
+    if (!dimensions || !dimensions.width || !dimensions.height) return true;
+    const { width, height } = dimensions;
+    const ratio = Math.max(width / height, height / width);
+    return ratio <= MAX_ASPECT_RATIO;
+}
+
 
 /**
  * Invokes the Bedrock AI model to generate alt text for a given image.
@@ -492,6 +573,8 @@ async function startProcess() {
         logger.info(`Filename: ${filebasename} | imageObjects: ${imageObjects}`);
         logger.info(`Filename: ${filebasename} | Total images to process: ${imageObjects.length}`);
         
+        let skippedCount = 0;
+
         for (const imageObject of imageObjects) {
             try {
                 const getObjectParams = {
@@ -502,7 +585,7 @@ async function startProcess() {
                 logger.info(`Filename: ${filebasename} | Image Object Bucketname: ${bucketName}`);
                 const command = new GetObjectCommand(getObjectParams);
                 const { Body } = await s3Client.send(command);
-        
+
                 // Stream the body contents to a buffer
                 const chunks = [];
                 await pipeline(Body, async function* (source) {
@@ -511,6 +594,16 @@ async function startProcess() {
                     }
                 });
                 const fileBuffer = Buffer.concat(chunks);
+
+                const dimensions = getImageDimensions(fileBuffer);
+                if (dimensions && !isAspectRatioValid(dimensions)) {
+                    skippedCount++;
+                    const altText = "Decorative element";
+                    combinedResults[imageObject.id] = altText;
+                    logger.info(`Filename: ${filebasename} | Skipping image ${imageObject.id} - aspect ratio ${Math.max(dimensions.width/dimensions.height, dimensions.height/dimensions.width).toFixed(1)}:1 exceeds ${MAX_ASPECT_RATIO}:1 limit (${dimensions.width}x${dimensions.height})`);
+                    continue;
+                }
+
                 const localFilePath = path.join(__dirname, `${imageObject.path.split('/').pop()}`);
                 logger.info(`Filename: ${filebasename} | Local File Path: ${localFilePath}`);
                 fs_1.writeFileSync(localFilePath, fileBuffer);
@@ -519,23 +612,25 @@ async function startProcess() {
                 logger.info(`Filename: ${filebasename} | Response:${response}`);
                 Object.assign(combinedResults, JSON.parse(response));
                 successCount++;
-                logger.info(`Filename: ${filebasename} | Alt text generation succeeded for image ${imageObject.id} (${successCount} succeeded, ${failureCount} failed)`);
+                logger.info(`Filename: ${filebasename} | Alt text generation succeeded for image ${imageObject.id} (${successCount} succeeded, ${failureCount} failed, ${skippedCount} skipped)`);
             } catch (error) {
                 failureCount++;
                 logger.error(`Filename: ${filebasename} | Alt text generation failed for image ${imageObject.id}: ${error.message || error}`);
-                logger.info(`Filename: ${filebasename} | Progress: ${successCount} succeeded, ${failureCount} failed`);
+                logger.info(`Filename: ${filebasename} | Progress: ${successCount} succeeded, ${failureCount} failed, ${skippedCount} skipped`);
             }
             await sleep(2000);
         }
 
-        // Check if we have any images and if all of them failed
-        if (imageObjects.length > 0 && successCount === 0) {
+        // Only fail if all images failed AND none were skipped (skipped images got default alt text)
+        if (imageObjects.length > 0 && successCount === 0 && skippedCount === 0) {
             logger.error(`Filename: ${filebasename} | All ${failureCount} alt text generation requests failed - likely due to throttling or Bedrock API issues`);
             logger.error(`File: ${filebasename}, Status: Failed in second ECS task - All Bedrock requests failed`);
+            await reportFailure(bucketName, filebasename, process.env.S3_FILE_KEY, "BEDROCK_API",
+                `All ${failureCount} Bedrock alt-text requests failed (throttling or Bedrock API issues).`);
             process.exit(1);
         }
         
-        logger.info(`Filename: ${filebasename} | Alt text generation complete: ${successCount} succeeded, ${failureCount} failed out of ${imageObjects.length} images`);
+        logger.info(`Filename: ${filebasename} | Alt text generation complete: ${successCount} succeeded, ${failureCount} failed, ${skippedCount} skipped (bad aspect ratio) out of ${imageObjects.length} images`);
 
         let defaultText = "No text available"; 
 
@@ -558,6 +653,8 @@ async function startProcess() {
     } catch (error) {
         logger.info(`File: ${filebasename}, Status: Error in second ECS task`);
         logger.error(`Filename: ${filebasename} | Error processing images: ${error}`);
+        await reportFailure(bucketName, filebasename, process.env.S3_FILE_KEY, "UNKNOWN",
+            `Error processing images: ${error.message || error}`);
         process.exit(1);
     }
 }
