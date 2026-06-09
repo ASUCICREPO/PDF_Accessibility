@@ -89,6 +89,10 @@ from adobe.pdfservices.operation.pdfjobs.result.autotag_pdf_result import Autota
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+
+class BadPdfError(Exception):
+    """Raised when Adobe rejects the PDF as damaged or too complex (BAD_PDF / 400)."""
+
 s3 = boto3.client('s3')
 
 # Pages per chunk -- must match the PDF splitter Lambda so reported page ranges
@@ -301,9 +305,15 @@ def autotag_pdf_with_options(filename, client_id, client_secret):
         
         logging.info(f'Filename : {filename} | Adobe Autotag completed successfully')
 
-    except (ServiceApiException, ServiceUsageException, SdkException) as e:
+    except ServiceApiException as e:
+        if "BAD_PDF" in str(e) or "400" in str(e):
+            logging.warning(f'Filename : {filename} | Adobe AutoTag rejected PDF as damaged/too complex (BAD_PDF) — will use fallback path')
+            raise BadPdfError(str(e))
         logging.error(f'Filename : {filename} | Adobe Autotag API failed: {e}')
-        raise  # Re-raise to stop the container
+        raise
+    except (ServiceUsageException, SdkException) as e:
+        logging.error(f'Filename : {filename} | Adobe Autotag API failed: {e}')
+        raise
 def extract_api(filename, client_id, client_secret):
     """
     Extracts text, tables, and figures from a PDF using Adobe PDF Services.
@@ -690,6 +700,22 @@ def extract_images_from_excel(filename, figure_path, autotag_report_path, images
                         f'{s3_folder_autotag}/{file_key}_temp_images_data.db')
         logging.info(f'Filename : {filename} | Uploaded SQLite DB to S3 With No Images')
 
+def _write_empty_image_db(images_output_dir, bucket_name, s3_folder_autotag, file_key, file_base_name):
+    """Write an empty SQLite image DB so the alt-text step sees zero images and completes cleanly."""
+    os.makedirs(images_output_dir, exist_ok=True)
+    db_path = os.path.join(images_output_dir, "temp_images_data.db")
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS image_data (
+            objid TEXT, img_path TEXT, prev TEXT, current TEXT, next TEXT, context TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+    s3.upload_file(db_path, bucket_name, f'{s3_folder_autotag}/{file_key}_temp_images_data.db')
+    logging.info(f'Filename : {file_base_name} | Uploaded empty image DB (BAD_PDF fallback)')
+
+
 def main():
     """
     Main function that coordinates the downloading, processing, and uploading of PDF files and associated content.
@@ -730,47 +756,67 @@ def main():
 
         # Run Adobe Autotag API
         logging.info(f'Filename : {file_key} | Running Adobe Autotag API...')
-        autotag_pdf_with_options(filename, client_id, client_secret)
+        bad_pdf_fallback = False
+        try:
+            autotag_pdf_with_options(filename, client_id, client_secret)
+        except BadPdfError as e:
+            # Adobe cannot process this PDF (damaged / too complex).
+            # Fall back: use the viewer-prefs PDF as-is, treat all images as
+            # decorative (empty DB), and let the rest of the pipeline complete
+            # so the user gets output rather than a silent failure.
+            bad_pdf_fallback = True
+            logging.warning(f'Filename : {file_key} | BAD_PDF fallback active — skipping Adobe autotag/extract, all images treated as decorative')
+            s3_folder_autotag = f"temp/{file_base_name}/output_autotag"
+            images_output_dir = "output/zipfile/images"
+            # Upload the viewer-prefs PDF as the autotag output so downstream steps have a file
+            save_to_s3(filename, bucket_name, "output_autotag", file_base_name, file_key)
+            # Write an empty image DB so the alt-text step finds zero images and skips all of them
+            _write_empty_image_db(images_output_dir, bucket_name, s3_folder_autotag, file_key, file_base_name)
+            logging.info(f'Filename : {file_key} | BAD_PDF fallback: uploaded viewer-prefs PDF and empty image DB')
 
-        # Run Adobe Extract API
-        logging.info(f'Filename : {file_key} | Running Adobe Extract API...')
-        extract_api(filename, client_id, client_secret)
+        if not bad_pdf_fallback:
+            # Run Adobe Extract API
+            logging.info(f'Filename : {file_key} | Running Adobe Extract API...')
+            extract_api(filename, client_id, client_secret)
 
-        extract_api_zip_path = f"output/ExtractTextInfoFromPDF/extract${filename}.zip"
-        extract_to = f"output/zipfile/{filename}"
-        
-        logging.info(f'Filename : {file_key} | Unzipping extracted content...')
-        unzip_file(filename, extract_api_zip_path, extract_to)
+            extract_api_zip_path = f"output/ExtractTextInfoFromPDF/extract${filename}.zip"
+            extract_to = f"output/zipfile/{filename}"
 
-        with open(f"output/zipfile/{filename}/structuredData.json") as file:
-            data = json.load(file)
+            logging.info(f'Filename : {file_key} | Unzipping extracted content...')
+            unzip_file(filename, extract_api_zip_path, extract_to)
 
-        pdf_document = pymupdf.open(filename)
+            with open(f"output/zipfile/{filename}/structuredData.json") as file:
+                data = json.load(file)
 
-        # Add TOC entries
-        logging.info(f'Filename : {file_key} | Adding TOC entries...')
-        add_toc_to_pdf(filename, pdf_document, data)
+            pdf_document = pymupdf.open(filename)
 
-        pdf_document.saveIncr()
-        pdf_document.close()
-        
-        logging.info(f'Filename : {file_key} | Uploading processed PDF to S3...')
-        save_to_s3(filename, bucket_name, "output_autotag", file_base_name, file_key)
+            # Add TOC entries
+            logging.info(f'Filename : {file_key} | Adding TOC entries...')
+            add_toc_to_pdf(filename, pdf_document, data)
 
-        logging.info(f"PDF saved with updated metadata and TOC. File location: COMPLIANT_{file_key}")
+            pdf_document.saveIncr()
+            pdf_document.close()
 
-        figure_path = f"{extract_to}/figures"
-        autotag_report_path = f"output/AutotagPDF/{filename}.xlsx"
-        images_output_dir = "output/zipfile/images"
+            logging.info(f'Filename : {file_key} | Uploading processed PDF to S3...')
+            save_to_s3(filename, bucket_name, "output_autotag", file_base_name, file_key)
 
-        s3_folder_autotag = f"temp/{file_base_name}/output_autotag"
-        
-        logging.info(f'Filename : {file_key} | Extracting and uploading images...')
-        extract_images_from_excel(filename, figure_path, autotag_report_path, images_output_dir, bucket_name, s3_folder_autotag, file_key)
-        
+            logging.info(f"PDF saved with updated metadata and TOC. File location: COMPLIANT_{file_key}")
+
+            figure_path = f"{extract_to}/figures"
+            autotag_report_path = f"output/AutotagPDF/{filename}.xlsx"
+            images_output_dir = "output/zipfile/images"
+
+            s3_folder_autotag = f"temp/{file_base_name}/output_autotag"
+
+            logging.info(f'Filename : {file_key} | Extracting and uploading images...')
+            extract_images_from_excel(filename, figure_path, autotag_report_path, images_output_dir, bucket_name, s3_folder_autotag, file_key)
+
         logging.info(f'Filename : {file_key} | Processing completed successfully')
         logger.info(f"File: {file_base_name}, Status: Succeeded in First ECS task")
         
+    except BadPdfError:
+        # Already handled above via fallback path — should not reach here
+        pass
     except (ServiceApiException, ServiceUsageException, SdkException) as e:
         logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - Adobe API Error")
         logger.error(f"Filename : {file_key} | Adobe API Error: {e}")
