@@ -191,11 +191,7 @@ def lambda_handler(event, context):
         "reason_category": primary_category,
         "summary": summary,
         "failed_chunks": failed_chunks,
-        "execution_arn": (
-            event.get("execution", {}).get("Id")
-            if isinstance(event.get("execution"), dict)
-            else None
-        ),
+        "execution_arn": event.get("executionArn"),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 

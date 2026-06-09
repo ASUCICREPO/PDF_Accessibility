@@ -394,9 +394,19 @@ class PDFAccessibility(Stack):
         pdf_processing_bucket.grant_read_write(failure_handler_lambda)
         failure_handler_lambda.add_to_role_policy(cloudwatch_metrics_policy)
 
+        # Pass the original state ($) plus the execution ARN from the Step Functions
+        # context object ($$). The ARN lets the failure marker reference the exact
+        # failed execution for support/tracing. chunks/s3_bucket/failureInfo are
+        # carried through from the state so the handler can identify the file and
+        # the failure reason.
         failure_handler_task = tasks.LambdaInvoke(self, "HandleWorkflowFailure",
                                       lambda_function=failure_handler_lambda,
-                                      payload=sfn.TaskInput.from_json_path_at("$"),
+                                      payload=sfn.TaskInput.from_object({
+                                          "chunks": sfn.JsonPath.string_at("$.chunks"),
+                                          "s3_bucket": sfn.JsonPath.string_at("$.s3_bucket"),
+                                          "failureInfo": sfn.JsonPath.string_at("$.failureInfo"),
+                                          "executionArn": sfn.JsonPath.string_at("$$.Execution.Id"),
+                                      }),
                                       output_path="$.Payload")
 
         # Route every failure of the parallel workflow to the failure handler.
