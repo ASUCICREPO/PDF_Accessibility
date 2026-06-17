@@ -391,10 +391,11 @@ def create_sqlite_db(by_page, filename, images_output_dir, object_ids, image_pat
             prev TEXT,
             current TEXT,
             next TEXT,
-            context TEXT
+            context TEXT,
+            existing_alt_text TEXT
         )
     """)
-    
+
     # This set ensures that a candidate from the API is only assigned once.
     assigned_candidates = set()
 
@@ -452,6 +453,7 @@ def create_sqlite_db(by_page, filename, images_output_dir, object_ids, image_pat
                 continue
             if current_candidate:
                 assigned_candidates.add(id(current_candidate))
+                current_candidate["existing_alt_text"] = excel_bbox[2]
             # --------------------------------------------------------------------
             # 2. Build the whole page context string.
             # --------------------------------------------------------------------
@@ -485,12 +487,13 @@ def create_sqlite_db(by_page, filename, images_output_dir, object_ids, image_pat
         print(" ======================")
         # Insert the data into the SQLite database.
         cursor.execute("""
-            INSERT INTO image_data (objid, img_path, context)
-            VALUES (?, ?, ?)
+            INSERT INTO image_data (objid, img_path, context, existing_alt_text)
+            VALUES (?, ?, ?, ?)
         """, (
             current_candidate["objid"],
             current_candidate["filePaths"][0].split("/")[-1],
-            context
+            context,
+            current_candidate["existing_alt_text"]
         ))
         print("Added in the database: ", current_candidate["objid"],
             current_candidate["filePaths"][0].split("/")[-1])
@@ -543,7 +546,9 @@ def extract_images_from_excel(filename, figure_path, autotag_report_path, images
         image_paths = []
         coordinates = df["Unnamed: 3"].dropna().values[1:]
         parsed_cordinates = [ast.literal_eval(item) for item in coordinates]
-        object_ids_cords = [(objid, cords) for objid, cords in zip(object_ids, parsed_cordinates)]
+        alt_texts_raw = df["Unnamed: 2"].dropna().values[1:]
+        alt_texts = [None if str(v).strip() == '<missing>' else str(v) for v in alt_texts_raw]
+        object_ids_cords = [(objid, cords, alt) for objid, cords, alt in zip(object_ids, parsed_cordinates, alt_texts)]
         print("Object IDs and Coordinates:", object_ids_cords)
         logging.info(f'Filename : {filename} | Sheet: {sheet} , Sheet Images: {sheet._images}')
 
@@ -581,7 +586,8 @@ def extract_images_from_excel(filename, figure_path, autotag_report_path, images
                 prev TEXT,
                 current TEXT,
                 next TEXT,
-                context TEXT
+                context TEXT,
+                existing_alt_text TEXT
             )
         """)
         

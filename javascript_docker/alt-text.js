@@ -463,6 +463,7 @@ async function startProcess() {
                     context_json: {
                         context: row.context,
                     },
+                    existing_alt_text: row.existing_alt_text || null,
                 };
             });
         } catch (err) {
@@ -480,6 +481,10 @@ async function startProcess() {
         let combinedResults = {};
         logger.info(`Filename: ${filebasename} | imageObjects: ${imageObjects}`);
         for (const imageObject of imageObjects) {
+            if (imageObject.existing_alt_text) {
+                logger.info(`Filename: ${filebasename} | Skipping alt text generation for image ${imageObject.id} - already has alt text`);
+                continue;
+            }
             try {
                 const getObjectParams = {
                     Bucket: bucketName,
@@ -514,6 +519,9 @@ async function startProcess() {
         let defaultText = "No text available"; 
 
         for (const imageObject of imageObjects) {
+            if (imageObject.existing_alt_text) {
+                continue;
+            }
             if (!combinedResults.hasOwnProperty(imageObject.id)) {
                 combinedResults[imageObject.id] = defaultText;
             }
