@@ -216,7 +216,7 @@ def lambda_handler(event, context):
     except Exception as e:
 
         print(f"File: {file_basename}, Status: Failed in split lambda function")
-        print(f"Filename - {pdf_file_key} | Error occurred: {str(e)}", exc_info=True)
+        print(f"Filename - {pdf_file_key} | Error occurred: {str(e)}")
         report_failure(bucket_name, file_basename, "SPLIT", f"Error processing event: {str(e)}")
         return {
             'statusCode': 500,
