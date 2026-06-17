@@ -69,6 +69,73 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+const MAX_ASPECT_RATIO = 20;
+
+function getImageDimensions(buffer) {
+    try {
+        if (buffer[0] === 0x89 && buffer[1] === 0x50) {
+            // PNG: width at offset 16, height at offset 20 (4 bytes each, big-endian)
+            const width = buffer.readUInt32BE(16);
+            const height = buffer.readUInt32BE(20);
+            return { width, height };
+        }
+        if (buffer[0] === 0xFF && buffer[1] === 0xD8) {
+            // JPEG: scan for SOF0 marker (0xFFC0)
+            let offset = 2;
+            while (offset < buffer.length - 9) {
+                if (buffer[offset] === 0xFF) {
+                    const marker = buffer[offset + 1];
+                    if (marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC) {
+                        const height = buffer.readUInt16BE(offset + 5);
+                        const width = buffer.readUInt16BE(offset + 7);
+                        return { width, height };
+                    }
+                    const segLen = buffer.readUInt16BE(offset + 2);
+                    offset += 2 + segLen;
+                } else {
+                    offset++;
+                }
+            }
+        }
+    } catch (e) {
+        return null;
+    }
+    return null;
+}
+
+function isAspectRatioValid(dimensions) {
+    if (!dimensions || !dimensions.width || !dimensions.height) return true;
+    const { width, height } = dimensions;
+    const ratio = Math.max(width / height, height / width);
+    return ratio <= MAX_ASPECT_RATIO;
+}
+
+/**
+ * Writes a structured failure-detail file that the Step Functions failure-handler
+ * aggregates into the user-facing result/FAILED_<name>.json marker.
+ */
+async function reportFailure(bucketName, fileBaseName, reasonCategory, message) {
+    logger.error(`File: ${fileBaseName}, Status: FAILED | station=alttext | reason=${reasonCategory} | ${message}`);
+
+    if (!bucketName || !fileBaseName) return;
+    const detail = {
+        station: "alttext",
+        reason_category: reasonCategory,
+        message: String(message).slice(0, 2000),
+    };
+    try {
+        await s3Client.send(new PutObjectCommand({
+            Bucket: bucketName,
+            Key: `temp/${fileBaseName}/_errors/alttext_failure.json`,
+            Body: JSON.stringify(detail),
+            ContentType: "application/json",
+        }));
+    } catch (e) {
+        logger.error(`Filename: ${fileBaseName} | Could not write failure detail: ${e.message || e}`);
+    }
+}
+
+
 
 /**
  * Invokes the Bedrock AI model to generate alt text for a given image.
@@ -471,6 +538,7 @@ async function startProcess() {
                     context_json: {
                         context: row.context,
                     },
+                    page_num: row.page_num || null,
                 };
             });
         } catch (err) {
@@ -492,6 +560,7 @@ async function startProcess() {
         logger.info(`Filename: ${filebasename} | imageObjects: ${imageObjects}`);
         logger.info(`Filename: ${filebasename} | Total images to process: ${imageObjects.length}`);
         
+        let skippedCount = 0;
         for (const imageObject of imageObjects) {
             try {
                 const getObjectParams = {
@@ -502,7 +571,7 @@ async function startProcess() {
                 logger.info(`Filename: ${filebasename} | Image Object Bucketname: ${bucketName}`);
                 const command = new GetObjectCommand(getObjectParams);
                 const { Body } = await s3Client.send(command);
-        
+
                 // Stream the body contents to a buffer
                 const chunks = [];
                 await pipeline(Body, async function* (source) {
@@ -511,6 +580,18 @@ async function startProcess() {
                     }
                 });
                 const fileBuffer = Buffer.concat(chunks);
+
+                // Aspect-ratio pre-check: skip images with extreme ratios
+                const dimensions = getImageDimensions(fileBuffer);
+                if (dimensions && !isAspectRatioValid(dimensions)) {
+                    const ratio = Math.max(dimensions.width / dimensions.height, dimensions.height / dimensions.width).toFixed(1);
+                    const pageDesc = imageObject.page_num ? ` | page=${imageObject.page_num}` : "";
+                    logger.info(`File: ${filebasename}, Status: INFO | station=alttext | image=${imageObject.id}${pageDesc} | action=decorative | reason=complex_image_aspect_ratio_${ratio}:1`);
+                    skippedCount++;
+                    combinedResults[imageObject.id] = "Decorative element";
+                    continue;
+                }
+
                 const localFilePath = path.join(__dirname, `${imageObject.path.split('/').pop()}`);
                 logger.info(`Filename: ${filebasename} | Local File Path: ${localFilePath}`);
                 fs_1.writeFileSync(localFilePath, fileBuffer);
@@ -522,26 +603,27 @@ async function startProcess() {
                 logger.info(`Filename: ${filebasename} | Alt text generation succeeded for image ${imageObject.id} (${successCount} succeeded, ${failureCount} failed)`);
             } catch (error) {
                 failureCount++;
-                logger.error(`Filename: ${filebasename} | Alt text generation failed for image ${imageObject.id}: ${error.message || error}`);
+                const pageDesc = imageObject.page_num ? ` | page=${imageObject.page_num}` : "";
+                logger.error(`File: ${filebasename}, Status: FAILED | station=alttext | image=${imageObject.id}${pageDesc} | reason=BEDROCK_API | ${error.message || error}`);
                 logger.info(`Filename: ${filebasename} | Progress: ${successCount} succeeded, ${failureCount} failed`);
             }
             await sleep(2000);
         }
 
-        // Check if we have any images and if all of them failed
-        if (imageObjects.length > 0 && successCount === 0) {
+        const processedImages = imageObjects.length - skippedCount;
+        if (processedImages > 0 && successCount === 0) {
             logger.error(`Filename: ${filebasename} | All ${failureCount} alt text generation requests failed - likely due to throttling or Bedrock API issues`);
             logger.error(`File: ${filebasename}, Status: Failed in second ECS task - All Bedrock requests failed`);
+            await reportFailure(bucketName, filebasename, "BEDROCK_API",
+                `All ${failureCount} Bedrock alt-text requests failed (throttling or Bedrock API issues).`);
             process.exit(1);
         }
-        
-        logger.info(`Filename: ${filebasename} | Alt text generation complete: ${successCount} succeeded, ${failureCount} failed out of ${imageObjects.length} images`);
 
-        let defaultText = "No text available"; 
+        logger.info(`Filename: ${filebasename} | Alt text generation complete: ${successCount} succeeded, ${failureCount} failed, ${skippedCount} decorative out of ${imageObjects.length} images`);
 
         for (const imageObject of imageObjects) {
             if (!combinedResults.hasOwnProperty(imageObject.id)) {
-                combinedResults[imageObject.id] = defaultText;
+                combinedResults[imageObject.id] = "Decorative element";
             }
         }
 
@@ -558,6 +640,8 @@ async function startProcess() {
     } catch (error) {
         logger.info(`File: ${filebasename}, Status: Error in second ECS task`);
         logger.error(`Filename: ${filebasename} | Error processing images: ${error}`);
+        await reportFailure(bucketName, filebasename, "UNKNOWN",
+            `Error processing images: ${error.message || error}`);
         process.exit(1);
     }
 }

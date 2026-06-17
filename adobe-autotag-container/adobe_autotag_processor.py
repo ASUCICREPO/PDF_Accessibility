@@ -91,6 +91,36 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 s3 = boto3.client('s3')
 
+def report_failure(bucket_name, file_base_name, chunk_key, reason_category, message):
+    """Write a structured failure-detail file the Step Functions failure-handler
+    aggregates into the user-facing result/FAILED_<name>.json marker.
+
+    Station: 'adobe' (Adobe AutoTag/Extract). Best-effort and exception-proof:
+    reporting a failure must never throw a second failure that masks the original.
+    """
+    logger.error(
+        f"File: {file_base_name}, Status: FAILED | station=adobe | "
+        f"reason={reason_category} | {message}"
+    )
+
+    if not bucket_name or not file_base_name:
+        return
+    detail = {
+        "station": "adobe",
+        "reason_category": reason_category,
+        "message": str(message)[:2000],
+    }
+    try:
+        s3.put_object(
+            Bucket=bucket_name,
+            Key=f"temp/{file_base_name}/_errors/adobe_failure.json",
+            Body=json.dumps(detail).encode("utf-8"),
+            ContentType="application/json",
+        )
+    except Exception as e:
+        logger.error(f"Filename : {file_base_name} | Could not write failure detail: {e}")
+
+
 def download_file_from_s3(bucket_name,file_base_name, file_key, local_path):
     """
     Download a file from an S3 bucket.
@@ -430,7 +460,8 @@ def create_sqlite_db(by_page, filename, images_output_dir, object_ids, image_pat
             prev TEXT,
             current TEXT,
             next TEXT,
-            context TEXT
+            context TEXT,
+            page_num INTEGER
         )
     """)
     
@@ -524,12 +555,13 @@ def create_sqlite_db(by_page, filename, images_output_dir, object_ids, image_pat
         print(" ======================")
         # Insert the data into the SQLite database.
         cursor.execute("""
-            INSERT INTO image_data (objid, img_path, context)
-            VALUES (?, ?, ?)
+            INSERT INTO image_data (objid, img_path, context, page_num)
+            VALUES (?, ?, ?, ?)
         """, (
             current_candidate["objid"],
             current_candidate["filePaths"][0].split("/")[-1],
-            context
+            context,
+            pg_num + 1
         ))
         print("Added in the database: ", current_candidate["objid"],
             current_candidate["filePaths"][0].split("/")[-1])
@@ -620,7 +652,8 @@ def extract_images_from_excel(filename, figure_path, autotag_report_path, images
                 prev TEXT,
                 current TEXT,
                 next TEXT,
-                context TEXT
+                context TEXT,
+                page_num INTEGER
             )
         """)
         
@@ -640,11 +673,12 @@ def main():
     """
     file_key = None
     file_base_name = None
-    
-    try:    
-        bucket_name = os.getenv('S3_BUCKET_NAME')
+    s3_file_key = None
+    bucket_name = os.getenv('S3_BUCKET_NAME')
+
+    try:
         s3_file_key = os.getenv('S3_FILE_KEY')
-        
+
         if not bucket_name or not s3_file_key:
             logging.error("Error: S3_BUCKET_NAME and S3_FILE_KEY environment variables are required.")
             sys.exit(1)
@@ -717,18 +751,26 @@ def main():
     except (ServiceApiException, ServiceUsageException, SdkException) as e:
         logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - Adobe API Error")
         logger.error(f"Filename : {file_key} | Adobe API Error: {e}")
+        report_failure(bucket_name, file_base_name, s3_file_key, "ADOBE_API",
+                       "Adobe API failed for this document. This document may be too complex for our Adobe API to handle.")
         sys.exit(1)
     except ClientError as e:
         logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - AWS Error")
         logger.error(f"Filename : {file_key} | AWS Error: {e}")
+        report_failure(bucket_name, file_base_name, s3_file_key, "INFRA",
+                       f"AWS infrastructure error: {e}")
         sys.exit(1)
     except FileNotFoundError as e:
         logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - File Not Found")
         logger.error(f"Filename : {file_key} | File Not Found Error: {e}")
+        report_failure(bucket_name, file_base_name, s3_file_key, "ADOBE_API",
+                       "Adobe API failed for this document. This document may be too complex for our Adobe API to handle.")
         sys.exit(1)
     except Exception as e:
         logger.error(f"File: {file_base_name}, Status: Failed in First ECS task")
         logger.error(f"Filename : {file_key} | Unexpected Error: {e}")
+        report_failure(bucket_name, file_base_name, s3_file_key, "UNKNOWN",
+                       f"Unexpected error processing this document: {e}")
         sys.exit(1)
         
 if __name__ == "__main__":
