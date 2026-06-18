@@ -614,8 +614,14 @@ async function startProcess() {
         if (processedImages > 0 && successCount === 0) {
             logger.error(`Filename: ${filebasename} | All ${failureCount} alt text generation requests failed - likely due to throttling or Bedrock API issues`);
             logger.error(`File: ${filebasename}, Status: Failed in second ECS task - All Bedrock requests failed`);
+            const failedPages = [...new Set(
+                imageObjects
+                    .filter(img => img.page_num != null && !combinedResults.hasOwnProperty(img.id))
+                    .map(img => img.page_num)
+            )].sort((a, b) => a - b);
+            const pageInfo = failedPages.length > 0 ? ` Failed on pages: ${failedPages.join(', ')}.` : '';
             await reportFailure(bucketName, filebasename, "BEDROCK_API",
-                `All ${failureCount} Bedrock alt-text requests failed (throttling or Bedrock API issues).`);
+                `All ${failureCount} Bedrock alt-text requests failed (throttling or Bedrock API issues).${pageInfo}`);
             process.exit(1);
         }
 

@@ -164,13 +164,20 @@ def lambda_handler(event, context):
             "reason_category": category,
             "message": err.get("message", ""),
         }
+        if err.get("page_start") is not None:
+            entry["page_start"] = err["page_start"]
+            entry["page_end"] = err.get("page_end", err["page_start"])
         failed_chunks.append(entry)
 
     # Choose the primary category (first non-UNKNOWN, else UNKNOWN).
     primary_category = next((c for c in categories if c != "UNKNOWN"), None) or (
         categories[0] if categories else "UNKNOWN"
     )
-    summary = REASON_SUMMARIES.get(primary_category, REASON_SUMMARIES["UNKNOWN"])
+    # Use the station's message as summary if it provides more detail than the
+    # generic category description (e.g. quota exhaustion vs. document complexity).
+    primary_error = next((e for e in station_errors if e.get("reason_category") == primary_category), None)
+    station_message = primary_error.get("message", "") if primary_error else ""
+    summary = station_message if station_message else REASON_SUMMARIES.get(primary_category, REASON_SUMMARIES["UNKNOWN"])
 
     marker = {
         "status": "FAILED",

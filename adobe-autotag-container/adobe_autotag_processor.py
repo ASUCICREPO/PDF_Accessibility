@@ -91,6 +91,25 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 s3 = boto3.client('s3')
 
+def _chunk_page_range(chunk_key):
+    """Return (page_start, page_end) for a chunk key like temp/<base>/<base>_chunk_N.pdf.
+
+    Uses the splitter's fixed 200-pages-per-chunk constant to compute the range.
+    Returns (None, None) if the chunk number cannot be parsed.
+    """
+    import re
+    PAGES_PER_CHUNK = 200
+    if not chunk_key:
+        return None, None
+    m = re.search(r'_chunk_(\d+)\.pdf$', chunk_key)
+    if not m:
+        return None, None
+    n = int(m.group(1))
+    page_start = (n - 1) * PAGES_PER_CHUNK + 1
+    page_end = n * PAGES_PER_CHUNK
+    return page_start, page_end
+
+
 def report_failure(bucket_name, file_base_name, chunk_key, reason_category, message):
     """Write a structured failure-detail file the Step Functions failure-handler
     aggregates into the user-facing result/FAILED_<name>.json marker.
@@ -98,9 +117,10 @@ def report_failure(bucket_name, file_base_name, chunk_key, reason_category, mess
     Station: 'adobe' (Adobe AutoTag/Extract). Best-effort and exception-proof:
     reporting a failure must never throw a second failure that masks the original.
     """
+    page_start, page_end = _chunk_page_range(chunk_key)
     logger.error(
         f"File: {file_base_name}, Status: FAILED | station=adobe | "
-        f"reason={reason_category} | {message}"
+        f"reason={reason_category} | page={page_start}-{page_end} | {message}"
     )
 
     if not bucket_name or not file_base_name:
@@ -110,6 +130,9 @@ def report_failure(bucket_name, file_base_name, chunk_key, reason_category, mess
         "reason_category": reason_category,
         "message": str(message)[:2000],
     }
+    if page_start is not None:
+        detail["page_start"] = page_start
+        detail["page_end"] = page_end
     try:
         s3.put_object(
             Bucket=bucket_name,
@@ -748,11 +771,18 @@ def main():
         logging.info(f'Filename : {file_key} | Processing completed successfully')
         logger.info(f"File: {file_base_name}, Status: Succeeded in First ECS task")
         
-    except (ServiceApiException, ServiceUsageException, SdkException) as e:
+    except ServiceUsageException as e:
+        # Quota / credits exhausted — not a document problem, retrying later may work.
+        logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - Adobe API Quota")
+        logger.error(f"Filename : {file_key} | Adobe API Quota Error: {e}")
+        report_failure(bucket_name, file_base_name, s3_file_key, "ADOBE_API",
+                       f"Adobe API quota or credits exhausted. Please try again later. Adobe error: {e}")
+        sys.exit(1)
+    except (ServiceApiException, SdkException) as e:
         logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - Adobe API Error")
         logger.error(f"Filename : {file_key} | Adobe API Error: {e}")
         report_failure(bucket_name, file_base_name, s3_file_key, "ADOBE_API",
-                       "Adobe API failed for this document. This document may be too complex for our Adobe API to handle.")
+                       f"Adobe API failed for this document. This document may be too complex for our Adobe API to handle. Adobe error: {e}")
         sys.exit(1)
     except ClientError as e:
         logger.error(f"File: {file_base_name}, Status: Failed in First ECS task - AWS Error")
