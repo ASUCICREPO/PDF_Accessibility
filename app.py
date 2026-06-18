@@ -174,7 +174,8 @@ class PDFAccessibility(Stack):
                                       cluster=pdf_remediation_cluster,
                                       task_definition=adobe_autotag_task_def,
                                       assign_public_ip=False,
-                                      
+                                      result_path="$.ecsResult",
+
                                       container_overrides=[tasks.ContainerOverride(
                                        container_definition = adobe_autotag_container_def,
                                           environment=[
@@ -213,11 +214,11 @@ class PDFAccessibility(Stack):
                                           environment=[
                                               tasks.TaskEnvironmentVariable(
                                                   name="S3_BUCKET_NAME",
-                                                  value=sfn.JsonPath.string_at("$.Overrides.ContainerOverrides[0].Environment[0].Value")
+                                                  value=sfn.JsonPath.string_at("$.s3_bucket")
                                               ),
                                               tasks.TaskEnvironmentVariable(
                                                   name="S3_FILE_KEY",
-                                                  value=sfn.JsonPath.string_at("$.Overrides.ContainerOverrides[0].Environment[1].Value")
+                                                  value=sfn.JsonPath.string_at("$.s3_key")
                                               ),
                                               tasks.TaskEnvironmentVariable(
                                                   name="AWS_REGION",
@@ -365,6 +366,57 @@ class PDFAccessibility(Stack):
                                       result_path="$.ParallelResults")
         parallel_accessibility_workflow.branch(remediation_chain)
         parallel_accessibility_workflow.branch(pre_remediation_accessibility_checker_task)
+
+        # ---------------------------------------------------------------------
+        # Failure-handler: the single, exhaustive safety net for the workflow.
+        #
+        # The frontend detects a finished job by polling the S3 result/ folder.
+        # Previously, any failure left the workflow FAILED with nothing written
+        # to result/, so the UI polled forever ("silent failure"). This Lambda
+        # is wired to a Catch that fires on EVERY error -- in-code (Adobe/Bedrock/
+        # complexity) and infrastructure (container can't start, OOM, timeout) --
+        # and writes result/FAILED_<name>.json carrying the reason category and
+        # the failing chunk/page range, so the UI can show the user what happened.
+        # It is invoked only on failure, so its cost is effectively zero.
+        # ---------------------------------------------------------------------
+        failure_handler_lambda = lambda_.Function(
+            self, 'WorkflowFailureHandlerLambda',
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler='main.lambda_handler',
+            code=lambda_.Code.from_asset('lambda/failure-handler'),
+            timeout=Duration.seconds(120),
+            memory_size=256,
+            environment={
+                'BUCKET_NAME': pdf_processing_bucket.bucket_name,
+            }
+        )
+        pdf_processing_bucket.grant_read_write(failure_handler_lambda)
+        failure_handler_lambda.add_to_role_policy(cloudwatch_metrics_policy)
+
+        # Pass the original state ($) plus the execution ARN from the Step Functions
+        # context object ($$). The ARN lets the failure marker reference the exact
+        # failed execution for support/tracing. chunks/s3_bucket/failureInfo are
+        # carried through from the state so the handler can identify the file and
+        # the failure reason.
+        failure_handler_task = tasks.LambdaInvoke(self, "HandleWorkflowFailure",
+                                      lambda_function=failure_handler_lambda,
+                                      payload=sfn.TaskInput.from_object({
+                                          "chunks": sfn.JsonPath.string_at("$.chunks"),
+                                          "s3_bucket": sfn.JsonPath.string_at("$.s3_bucket"),
+                                          "failureInfo": sfn.JsonPath.string_at("$.failureInfo"),
+                                          "executionArn": sfn.JsonPath.string_at("$$.Execution.Id"),
+                                      }),
+                                      output_path="$.Payload")
+
+        # Route every failure of the parallel workflow to the failure handler.
+        # result_path keeps the original input (chunks, s3_bucket) intact and
+        # nests the Step Functions Error/Cause under $.failureInfo so the handler
+        # can recover both the file identity and the failure reason.
+        parallel_accessibility_workflow.add_catch(
+            failure_handler_task,
+            errors=["States.ALL"],
+            result_path="$.failureInfo"
+        )
 
         pdf_remediation_workflow_log_group = logs.LogGroup(self, "PdfRemediationWorkflowLogs",
             log_group_name="/aws/states/pdf-accessibility-remediation-workflow",

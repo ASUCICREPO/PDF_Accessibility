@@ -6,9 +6,12 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.amazonaws.services.s3.model.ObjectMetadata;
 import org.apache.pdfbox.multipdf.PDFMergerUtility;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -79,10 +82,51 @@ public class App implements RequestHandler<Map<String, Object>, String> {
             return String.format("PDFs merged successfully.\nBucket: %s\nMerged File Key: %s\nMerged File Name: %s", 
                              bucketName, outputKey, baseFileName);
         } catch (Exception e) {
-            baseFileName = baseFileName.replace(".pdf", "");
-            System.out.println("File: " + baseFileName + ", Status: Failed in Merging the PDF");
-            System.out.println(String.format("Filename: %s, File not found: %s", baseFileName, e.getMessage()));
-            return "Failed to merge PDFs.";
+            String reportName = baseFileName.replace(".pdf", "");
+            System.out.println("File: " + reportName + ", Status: FAILED | station=merge | reason=MERGE | " + e.getMessage());
+            // Write a station detail file the Step Functions failure-handler aggregates
+            // into the user-facing result/FAILED_<name>.json marker.
+            reportFailure(bucketName, reportName, "MERGE", e.getMessage());
+            // Re-throw so the state machine's Catch fires. Returning a string here
+            // would be treated as SUCCESS by Step Functions and continue silently.
+            throw new RuntimeException("Failed to merge PDFs for " + reportName, e);
+        }
+    }
+
+    /**
+     * Writes a structured failure-detail file the Step Functions failure-handler
+     * aggregates into result/FAILED_<name>.json. Station: 'merge'.
+     * Best-effort: a failure while reporting must not mask the original error.
+     *
+     * @param bucketName The S3 bucket.
+     * @param fileBaseName The base file name (no extension) matching temp/<name>/.
+     * @param reasonCategory The failure category (e.g. "MERGE").
+     * @param message The error message.
+     */
+    private void reportFailure(String bucketName, String fileBaseName, String reasonCategory, String message) {
+        if (bucketName == null || fileBaseName == null) {
+            return;
+        }
+        try {
+            // Escape for safe embedding in a JSON string literal: backslashes
+            // first, then quotes, then control chars that would break parsing.
+            String safeMessage = message == null ? "" : message
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", " ")
+                .replace("\r", " ")
+                .replace("\t", " ");
+            String json = String.format(
+                "{\"station\":\"merge\",\"reason_category\":\"%s\",\"message\":\"%s\"}",
+                reasonCategory, safeMessage);
+            byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentLength(bytes.length);
+            metadata.setContentType("application/json");
+            String key = String.format("temp/%s/_errors/merge.json", fileBaseName);
+            s3Client.putObject(new PutObjectRequest(bucketName, key, new ByteArrayInputStream(bytes), metadata));
+        } catch (Exception ex) {
+            System.out.println(String.format("Filename: %s, Could not write failure detail: %s", fileBaseName, ex.getMessage()));
         }
     }
 

@@ -14,6 +14,7 @@ import boto3
 import urllib.parse
 import io
 import os
+import datetime
 
 # Initialize AWS clients
 cloudwatch = boto3.client('cloudwatch')
@@ -21,6 +22,41 @@ s3_client = boto3.client('s3')
 stepfunctions = boto3.client('stepfunctions')
 
 state_machine_arn = os.environ['STATE_MACHINE_ARN']
+
+
+def report_failure(bucket_name, file_basename, reason_category, message):
+    """Write the user-facing result/FAILED_<name>.json marker directly.
+
+    The splitter is the FIRST station and it is what STARTS the Step Functions
+    execution. A failure here therefore happens before any state machine exists,
+    so the Step Functions Catch safety net cannot cover it. To keep the "no
+    silent failure" guarantee, the splitter writes the failure marker itself, in
+    the same result/ folder the frontend polls. Station: 'split'.
+
+    Best-effort and exception-proof: a failure while reporting a failure must not
+    crash the handler.
+    """
+    # Structured CloudWatch line for the dashboard "File status" widget.
+    print(f"File: {file_basename}, Status: FAILED | station=split | reason={reason_category} | {message}")
+    if not bucket_name or not file_basename:
+        return
+    marker = {
+        "status": "FAILED",
+        "filename": file_basename,
+        "reason_category": reason_category,
+        "summary": "The document could not be split into pages for processing.",
+        "failed_chunks": [{"station": "split", "reason_category": reason_category, "message": str(message)[:2000]}],
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+    try:
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=f"result/FAILED_{file_basename}.json",
+            Body=json.dumps(marker, indent=2).encode("utf-8"),
+            ContentType="application/json",
+        )
+    except Exception as e:
+        print(f"Filename - {file_basename} | CRITICAL: could not write failure marker: {e}")
 
 def log_chunk_created(filename):
     """
@@ -98,7 +134,9 @@ def split_pdf_into_pages(source_content, original_key, s3_client, bucket_name, p
         chunks.append({
             "s3_bucket": bucket_name,
             "s3_key": s3_key,
-            "chunk_key": s3_key  # Key for the chunk
+            "chunk_key": s3_key,
+            "total_pages": num_pages,
+            "pages_in_chunk": min(pages_per_chunk, num_pages - start),
         })
 
     return chunks
@@ -120,8 +158,11 @@ def lambda_handler(event, context):
     Returns:
         dict: HTTP response indicating the success or failure of the Lambda function execution.
     """
+    bucket_name = None
+    pdf_file_key = None
+    file_basename = None
     try:
-        
+
         print("Received event: " + json.dumps(event, indent=2))
 
         # Access the S3 event structure
@@ -155,17 +196,19 @@ def lambda_handler(event, context):
         print(f"Filename - {pdf_file_key} | Step Function started: {response['executionArn']}")
 
     except KeyError as e:
- 
+
         print(f"File: {file_basename}, Status: Failed in split lambda function")
         print(f"Filename - {pdf_file_key} | KeyError: {str(e)}")
+        report_failure(bucket_name, file_basename, "SPLIT", f"Missing key in event: {str(e)}")
         return {
             'statusCode': 500,
             'body': json.dumps(f"Error: Missing key in event: {str(e)}")
         }
     except ValueError as e:
-  
+
         print(f"File: {file_basename}, Status: Failed in split lambda function")
         print(f"Filename - {pdf_file_key} | ValueError: {str(e)}")
+        report_failure(bucket_name, file_basename, "SPLIT", f"Invalid input: {str(e)}")
         return {
             'statusCode': 500,
             'body': json.dumps(f"Error: {str(e)}")
@@ -173,7 +216,8 @@ def lambda_handler(event, context):
     except Exception as e:
 
         print(f"File: {file_basename}, Status: Failed in split lambda function")
-        print(f"Filename - {pdf_file_key} | Error occurred: {str(e)}", exc_info=True)
+        print(f"Filename - {pdf_file_key} | Error occurred: {str(e)}")
+        report_failure(bucket_name, file_basename, "SPLIT", f"Error processing event: {str(e)}")
         return {
             'statusCode': 500,
             'body': json.dumps(f"Error processing event: {str(e)}")
