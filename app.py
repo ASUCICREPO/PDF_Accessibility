@@ -29,7 +29,7 @@ class PDFAccessibility(Stack):
         tagging_engine = (
             self.node.try_get_context("TAGGING_ENGINE")
             or os.environ.get("TAGGING_ENGINE")
-            or "adobe"
+            or "opendataloader"
         ).lower()
 
         if tagging_engine not in ("adobe", "opendataloader"):
@@ -502,7 +502,7 @@ class PDFAccessibility(Stack):
         )
 
 app = cdk.App()
-stack_name = os.environ.get("PDF_STACK_NAME", "PDFAccessibility")
+stack_name = os.environ.get("PDF_STACK_NAME", "PDFAccessibilityOdlDev")
 
 PDFAccessibility(app, stack_name)
 app.synth()

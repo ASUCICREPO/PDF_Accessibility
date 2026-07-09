@@ -74,8 +74,12 @@ deploy_backend_solution() {
         print_status "🔐 PDF-to-PDF specific configuration..."
         echo ""
         
-        # Adobe API credentials
-        if [ -z "$ADOBE_CLIENT_ID" ]; then
+        if [ "${TAGGING_ENGINE:-opendataloader}" != "adobe" ]; then
+            print_status "Skipping Adobe credentials because TAGGING_ENGINE=${TAGGING_ENGINE:-opendataloader}"
+            echo ""
+        else
+            # Adobe API credentials
+            if [ -z "$ADOBE_CLIENT_ID" ]; then
             echo "Adobe PDF Services API credentials are required:"
             echo "(These will be stored securely in AWS Secrets Manager)"
             read -p "   Enter Adobe API Client ID: " ADOBE_CLIENT_ID
@@ -109,9 +113,10 @@ deploy_backend_solution() {
             print_success "   ✅ Secret updated successfully in Secrets Manager!"
         fi
         
-        # Clean up temporary file
-        rm -f client_credentials.json
-        echo ""
+            # Clean up temporary file
+            rm -f client_credentials.json
+            echo ""
+        fi
         
     elif [ "$DEPLOYMENT_TYPE" == "pdf2html" ]; then
         print_status "🧠 PDF-to-HTML specific configuration..."
