@@ -242,13 +242,13 @@ deploy_backend_solution() {
         BUILD_IMAGE="aws/codebuild/amazonlinux-x86_64-standard:5.0"
         COMPUTE_TYPE="BUILD_GENERAL1_SMALL"
         PRIVILEGED_MODE="true"
-        SOURCE_VERSION="main"
+        SOURCE_VERSION="${SOURCE_VERSION:-opendataloader-pdf2pdf}"
         BUILDSPEC_FILE="buildspec-unified.yml"
     else
         BUILD_IMAGE="aws/codebuild/amazonlinux2-x86_64-standard:5.0"
         COMPUTE_TYPE="BUILD_GENERAL1_LARGE"
         PRIVILEGED_MODE="true"
-        SOURCE_VERSION="main"
+        SOURCE_VERSION="${SOURCE_VERSION:-opendataloader-pdf2pdf}"
         BUILDSPEC_FILE="buildspec-unified.yml"
     fi
 
@@ -266,7 +266,9 @@ deploy_backend_solution() {
         ]"
     else
         ENV_VARS="[
-            {\"name\": \"DEPLOYMENT_TYPE\", \"value\": \"$DEPLOYMENT_TYPE\"}
+            {\"name\": \"DEPLOYMENT_TYPE\", \"value\": \"$DEPLOYMENT_TYPE\"},
+            {\"name\": \"PDF_STACK_NAME\", \"value\": \"${PDF_STACK_NAME:-PDFAccessibilityOdlDev}\"},
+            {\"name\": \"TAGGING_ENGINE\", \"value\": \"${TAGGING_ENGINE:-opendataloader}\"}
         ]"
     fi
 
@@ -391,14 +393,14 @@ deploy_backend_solution() {
         
         # Method 1: Try CloudFormation stack outputs
         PDF2PDF_BUCKET=$(aws cloudformation describe-stacks \
-            --stack-name "PDFAccessibility" \
+            --stack-name "${PDF_STACK_NAME:-PDFAccessibilityOdlDev}" \
             --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' \
             --output text 2>/dev/null)
         
         # Method 2: Try alternative output key names
         if [ -z "$PDF2PDF_BUCKET" ] || [ "$PDF2PDF_BUCKET" == "None" ]; then
             PDF2PDF_BUCKET=$(aws cloudformation describe-stacks \
-                --stack-name "PDFAccessibility" \
+                --stack-name "${PDF_STACK_NAME:-PDFAccessibilityOdlDev}" \
                 --query 'Stacks[0].Outputs[?contains(OutputKey, `Bucket`)].OutputValue' \
                 --output text 2>/dev/null | head -1)
         fi
@@ -480,7 +482,7 @@ deploy_ui() {
     UI_TEMP_DIR="/tmp/pdf-ui-deployment-$$"
     print_status "📥 Cloning UI repository..."
     
-    if ! git clone -b main https://github.com/ASUCICREPO/PDF_accessability_UI "$UI_TEMP_DIR" 2>/dev/null; then
+    if ! git clone -b "${UI_BRANCH:-main}" "${UI_GITHUB_URL:-https://github.com/oikos99/PDF_accessability_UI.git}" "$UI_TEMP_DIR" 2>/dev/null; then
         print_error "Failed to clone UI repository. Check internet connection and repository access."
         return 1
     fi
@@ -494,7 +496,7 @@ deploy_ui() {
     export PROJECT_NAME="${PROJECT_NAME}-ui"
     export PDF_TO_PDF_BUCKET="$pdf_to_pdf_bucket"
     export PDF_TO_HTML_BUCKET="$pdf_to_html_bucket"
-    export TARGET_BRANCH="main"
+    export TARGET_BRANCH="${UI_BRANCH:-main}"
     
     print_status "🚀 Starting UI deployment..."
     print_status "   This may take 10-15 minutes..."
@@ -683,12 +685,12 @@ print_success "✅ AWS credentials verified. Account: $ACCOUNT_ID, Region: $REGI
 echo ""
 
 # GitHub repository URL (hardcoded)
-GITHUB_URL="https://github.com/ASUCICREPO/PDF_Accessibility.git"
+GITHUB_URL="${GITHUB_URL:-https://github.com/oikos99/PDF_Accessibility.git}"
 print_success "   Repository: $GITHUB_URL ✅"
 echo ""
 
 # CodeBuild project name (hardcoded with timestamp)
-PROJECT_NAME="pdfremediation-$(date +%Y%m%d%H%M%S)"
+PROJECT_NAME="${PROJECT_NAME:-pdfremediation-$(date +%Y%m%d%H%M%S)}"
 print_success "   Project: $PROJECT_NAME ✅"
 echo ""
 

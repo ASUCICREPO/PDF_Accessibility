@@ -19,11 +19,27 @@ from aws_cdk import (
 from constructs import Construct
 import platform
 import datetime
+import os
 
 class PDFAccessibility(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
-        
+
+        stack_suffix = construct_id.lower()
+        tagging_engine = (
+            self.node.try_get_context("TAGGING_ENGINE")
+            or os.environ.get("TAGGING_ENGINE")
+            or "adobe"
+        ).lower()
+
+        if tagging_engine not in ("adobe", "opendataloader"):
+            raise ValueError(f"Unsupported TAGGING_ENGINE: {tagging_engine}")
+
+        autotag_container_dir = (
+            "opendataloader-autotag-container"
+            if tagging_engine == "opendataloader"
+            else "adobe-autotag-container"
+        )
         # S3 Bucket
         pdf_processing_bucket = s3.Bucket(self, "pdfaccessibilitybucket1", 
                           encryption=s3.BucketEncryption.S3_MANAGED, 
@@ -38,7 +54,7 @@ class PDFAccessibility(Stack):
         # Docker images with zstd compression for faster Fargate cold starts
         # zstd decompresses ~2-3x faster than gzip, reducing container startup time
         adobe_autotag_image_asset = ecr_assets.DockerImageAsset(self, "AdobeAutotagImage",
-                                                         directory="adobe-autotag-container",
+                                                         directory=autotag_container_dir,
                                                          platform=ecr_assets.Platform.LINUX_AMD64,
                                                          # Enable zstd compression for faster decompression on Fargate
                                                          cache_to=ecr_assets.DockerCacheOption(
@@ -134,12 +150,12 @@ class PDFAccessibility(Stack):
         pdf_processing_bucket.grant_read_write(ecs_task_execution_role)
         # Create ECS Task Log Groups explicitly
         adobe_autotag_log_group = logs.LogGroup(self, "AdobeAutotagContainerLogs",
-                                                log_group_name="/ecs/pdf-remediation/adobe-autotag",
+                                                log_group_name=f"/ecs/pdf-remediation/{stack_suffix}/{autotag_container_dir}",
                                                 retention=logs.RetentionDays.ONE_MONTH,
                                                 removal_policy=cdk.RemovalPolicy.DESTROY)
 
         alt_text_generator_log_group = logs.LogGroup(self, "AltTextGeneratorContainerLogs",
-                                                    log_group_name="/ecs/pdf-remediation/alt-text-generator",
+                                                    log_group_name=f"/ecs/pdf-remediation/{stack_suffix}/alt-text-generator",
                                                     retention=logs.RetentionDays.ONE_MONTH,
                                                     removal_policy=cdk.RemovalPolicy.DESTROY)
         # ECS Task Definitions
@@ -367,7 +383,7 @@ class PDFAccessibility(Stack):
         parallel_accessibility_workflow.branch(pre_remediation_accessibility_checker_task)
 
         pdf_remediation_workflow_log_group = logs.LogGroup(self, "PdfRemediationWorkflowLogs",
-            log_group_name="/aws/states/pdf-accessibility-remediation-workflow",
+            log_group_name=f"/aws/states/{stack_suffix}/pdf-accessibility-remediation-workflow",
             retention=logs.RetentionDays.ONE_MONTH,
             removal_policy=cdk.RemovalPolicy.DESTROY
         )
@@ -486,5 +502,7 @@ class PDFAccessibility(Stack):
         )
 
 app = cdk.App()
-PDFAccessibility(app, "PDFAccessibility")
+stack_name = os.environ.get("PDF_STACK_NAME", "PDFAccessibility")
+
+PDFAccessibility(app, stack_name)
 app.synth()
