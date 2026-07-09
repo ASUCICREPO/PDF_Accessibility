@@ -1,3 +1,9 @@
-FROM public.ecr.aws/lambda/python:3.12
-COPY main.py ${LAMBDA_TASK_ROOT}/main.py
-CMD ["main.lambda_handler"]
+FROM public.ecr.aws/sam/build-python3.12:latest
+
+WORKDIR /tmp/build
+
+COPY main.py .
+
+RUN python -m py_compile main.py \
+    && mkdir -p /asset \
+    && cp main.py /asset/main.py
