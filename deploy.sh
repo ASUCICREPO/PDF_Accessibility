@@ -273,7 +273,7 @@ deploy_backend_solution() {
         ENV_VARS="[
             {\"name\": \"DEPLOYMENT_TYPE\", \"value\": \"$DEPLOYMENT_TYPE\"},
             {\"name\": \"PDF_STACK_NAME\", \"value\": \"${PDF_STACK_NAME:-PDFAccessibilityOdlDev}\"},
-            {\"name\": \"TAGGING_ENGINE\", \"value\": \"${TAGGING_ENGINE:-opendataloader}\"}
+            {\"name\": \"TAGGING_ENGINE\", \"value\": \"${TAGGING_ENGINE:-opendataloader}\"}, {\"name\": \"OCR_MODE\", \"value\": \"${OCR_MODE:-auto}\"}, {\"name\": \"OCR_TEXT_THRESHOLD\", \"value\": \"${OCR_TEXT_THRESHOLD:-20}\"}, {\"name\": \"OCR_LANGUAGE\", \"value\": \"${OCR_LANGUAGE:-eng}\"}, {\"name\": \"OCR_ON_FAILURE\", \"value\": \"${OCR_ON_FAILURE:-fail}\"}, {\"name\": \"ODL_HYBRID\", \"value\": \"${ODL_HYBRID:-off}\"}, {\"name\": \"ODL_HYBRID_MODE\", \"value\": \"${ODL_HYBRID_MODE:-auto}\"}, {\"name\": \"ODL_HYBRID_FALLBACK\", \"value\": \"${ODL_HYBRID_FALLBACK:-true}\"}, {\"name\": \"ODL_HYBRID_TIMEOUT_MS\", \"value\": \"${ODL_HYBRID_TIMEOUT_MS:-60000}\"}, {\"name\": \"ODL_HYBRID_START_SERVER\", \"value\": \"${ODL_HYBRID_START_SERVER:-true}\"}, {\"name\": \"ODL_HYBRID_PORT\", \"value\": \"${ODL_HYBRID_PORT:-5002}\"}, {\"name\": \"ODL_HYBRID_STARTUP_TIMEOUT\", \"value\": \"${ODL_HYBRID_STARTUP_TIMEOUT:-120}\"}, {\"name\": \"ODL_TABLE_METHOD\", \"value\": \"${ODL_TABLE_METHOD:-}\"}, {\"name\": \"ODL_INCLUDE_HEADER_FOOTER\", \"value\": \"${ODL_INCLUDE_HEADER_FOOTER:-false}\"}, {\"name\": \"ODL_TASK_MEMORY_MIB\", \"value\": \"${ODL_TASK_MEMORY_MIB:-4096}\"}, {\"name\": \"ODL_TASK_CPU\", \"value\": \"${ODL_TASK_CPU:-1024}\"}
         ]"
     fi
 

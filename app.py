@@ -40,6 +40,9 @@ class PDFAccessibility(Stack):
             if tagging_engine == "opendataloader"
             else "adobe-autotag-container"
         )
+
+        odl_task_memory_mib = int(os.environ.get("ODL_TASK_MEMORY_MIB", "4096"))
+        odl_task_cpu = int(os.environ.get("ODL_TASK_CPU", "1024"))
         # S3 Bucket
         pdf_processing_bucket = s3.Bucket(self, "pdfaccessibilitybucket1", 
                           encryption=s3.BucketEncryption.S3_MANAGED, 
@@ -160,13 +163,13 @@ class PDFAccessibility(Stack):
                                                     removal_policy=cdk.RemovalPolicy.DESTROY)
         # ECS Task Definitions
         adobe_autotag_task_def = ecs.FargateTaskDefinition(self, "AdobeAutotagTaskDefinition",
-                                                      memory_limit_mib=1024,
-                                                      cpu=256, execution_role=ecs_task_execution_role, task_role=ecs_task_role,
+                                                      memory_limit_mib=odl_task_memory_mib,
+                                                      cpu=odl_task_cpu, execution_role=ecs_task_execution_role, task_role=ecs_task_role,
                                                      )
 
         adobe_autotag_container_def = adobe_autotag_task_def.add_container("adobe-autotag-container",
                                                                   image=ecs.ContainerImage.from_registry(adobe_autotag_image_asset.image_uri),
-                                                                  memory_limit_mib=1024,
+                                                                  memory_limit_mib=odl_task_memory_mib,
                                                                   logging=ecs.LogDrivers.aws_logs(
         stream_prefix="AdobeAutotagLogs",
         log_group=adobe_autotag_log_group,
@@ -239,6 +242,19 @@ class PDFAccessibility(Stack):
                                                   name="AWS_REGION",
                                                   value=region
                                               ),
+                                              tasks.TaskEnvironmentVariable(name="OCR_MODE", value=os.environ.get("OCR_MODE", "auto")),
+                                              tasks.TaskEnvironmentVariable(name="OCR_TEXT_THRESHOLD", value=os.environ.get("OCR_TEXT_THRESHOLD", "20")),
+                                              tasks.TaskEnvironmentVariable(name="OCR_LANGUAGE", value=os.environ.get("OCR_LANGUAGE", "eng")),
+                                              tasks.TaskEnvironmentVariable(name="OCR_ON_FAILURE", value=os.environ.get("OCR_ON_FAILURE", "fail")),
+                                              tasks.TaskEnvironmentVariable(name="ODL_HYBRID", value=os.environ.get("ODL_HYBRID", "off")),
+                                              tasks.TaskEnvironmentVariable(name="ODL_HYBRID_MODE", value=os.environ.get("ODL_HYBRID_MODE", "auto")),
+                                              tasks.TaskEnvironmentVariable(name="ODL_HYBRID_FALLBACK", value=os.environ.get("ODL_HYBRID_FALLBACK", "true")),
+                                              tasks.TaskEnvironmentVariable(name="ODL_HYBRID_TIMEOUT_MS", value=os.environ.get("ODL_HYBRID_TIMEOUT_MS", "60000")),
+                                              tasks.TaskEnvironmentVariable(name="ODL_HYBRID_START_SERVER", value=os.environ.get("ODL_HYBRID_START_SERVER", "true")),
+                                              tasks.TaskEnvironmentVariable(name="ODL_HYBRID_PORT", value=os.environ.get("ODL_HYBRID_PORT", "5002")),
+                                              tasks.TaskEnvironmentVariable(name="ODL_HYBRID_STARTUP_TIMEOUT", value=os.environ.get("ODL_HYBRID_STARTUP_TIMEOUT", "120")),
+                                              tasks.TaskEnvironmentVariable(name="ODL_TABLE_METHOD", value=os.environ.get("ODL_TABLE_METHOD", "")),
+                                              tasks.TaskEnvironmentVariable(name="ODL_INCLUDE_HEADER_FOOTER", value=os.environ.get("ODL_INCLUDE_HEADER_FOOTER", "false")),
                                           ]
                                       )],
                                       launch_target=tasks.EcsFargateLaunchTarget(

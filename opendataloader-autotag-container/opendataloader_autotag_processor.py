@@ -34,9 +34,12 @@ import json
 import logging
 import os
 import shutil
+import shlex
 import sqlite3
+import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -246,33 +249,155 @@ def add_viewer_preferences(input_pdf: Path, output_pdf: Path) -> None:
         writer.write(f)
 
 
+
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def wait_for_port(host: str, port: int, timeout_seconds: int) -> None:
+    deadline = time.time() + timeout_seconds
+    last_error: Exception | None = None
+
+    while time.time() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=2):
+                return
+        except Exception as exc:
+            last_error = exc
+            time.sleep(1)
+
+    raise TimeoutError(
+        f"Hybrid backend did not open {host}:{port} within {timeout_seconds}s. "
+        f"Last error: {last_error}"
+    )
+
+
+def start_hybrid_backend(port: int, startup_timeout: int) -> subprocess.Popen[str]:
+    cmd = ["opendataloader-pdf-hybrid", "--port", str(port)]
+
+    extra_args = os.environ.get("ODL_HYBRID_SERVER_ARGS", "").strip()
+    if extra_args:
+        cmd.extend(shlex.split(extra_args))
+
+    logger.info("Starting OpenDataLoader hybrid backend: %s", " ".join(cmd))
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    try:
+        wait_for_port("127.0.0.1", port, startup_timeout)
+    except Exception:
+        proc.terminate()
+        try:
+            stdout, stderr = proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout, stderr = proc.communicate()
+        logger.error("Hybrid backend stdout:\n%s", stdout)
+        logger.error("Hybrid backend stderr:\n%s", stderr)
+        raise
+
+    logger.info("OpenDataLoader hybrid backend is ready on port %s", port)
+    return proc
+
+
+def stop_hybrid_backend(proc: subprocess.Popen[str] | None) -> None:
+    if proc is None:
+        return
+
+    logger.info("Stopping OpenDataLoader hybrid backend")
+    proc.terminate()
+
+    try:
+        stdout, stderr = proc.communicate(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        stdout, stderr = proc.communicate()
+
+    if stdout:
+        logger.info("Hybrid backend stdout tail:\n%s", stdout[-4000:])
+    if stderr:
+        logger.info("Hybrid backend stderr tail:\n%s", stderr[-4000:])
+
+
+def build_opendataloader_command(input_pdf: Path, output_dir: Path, image_dir: Path) -> tuple[list[str], subprocess.Popen[str] | None]:
+    hybrid = os.environ.get("ODL_HYBRID", "off").strip().lower()
+    hybrid_mode = os.environ.get("ODL_HYBRID_MODE", "auto").strip().lower()
+    hybrid_fallback = env_bool("ODL_HYBRID_FALLBACK", True)
+    hybrid_timeout = os.environ.get("ODL_HYBRID_TIMEOUT_MS", "60000").strip()
+    hybrid_port = env_int("ODL_HYBRID_PORT", 5002)
+    hybrid_start_server = env_bool("ODL_HYBRID_START_SERVER", hybrid not in {"", "off", "false", "none"})
+    hybrid_startup_timeout = env_int("ODL_HYBRID_STARTUP_TIMEOUT", 120)
+
+    table_method = os.environ.get("ODL_TABLE_METHOD", "").strip()
+    include_header_footer = env_bool("ODL_INCLUDE_HEADER_FOOTER", False)
+
+    cmd = [
+        "opendataloader-pdf",
+        "--format", "json,tagged-pdf",
+        "--output-dir", str(output_dir),
+        "--image-output", "external",
+        "--image-format", "png",
+        "--image-dir", str(image_dir),
+    ]
+
+    hybrid_proc: subprocess.Popen[str] | None = None
+
+    if hybrid not in {"", "off", "false", "none"}:
+        if hybrid_start_server:
+            hybrid_proc = start_hybrid_backend(hybrid_port, hybrid_startup_timeout)
+            hybrid_url = f"http://127.0.0.1:{hybrid_port}"
+        else:
+            hybrid_url = os.environ.get("ODL_HYBRID_URL", "").strip()
+
+        cmd.extend(["--hybrid", hybrid])
+        cmd.extend(["--hybrid-mode", hybrid_mode])
+
+        if hybrid_url:
+            cmd.extend(["--hybrid-url", hybrid_url])
+
+        if hybrid_timeout:
+            cmd.extend(["--hybrid-timeout", hybrid_timeout])
+
+        if hybrid_fallback:
+            cmd.append("--hybrid-fallback")
+
+    if table_method:
+        cmd.extend(["--table-method", table_method])
+
+    if include_header_footer:
+        cmd.append("--include-header-footer")
+
+    cmd.append(str(input_pdf))
+    return cmd, hybrid_proc
+
+
 def run_opendataloader(input_pdf: Path, output_dir: Path, image_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     image_dir.mkdir(parents=True, exist_ok=True)
 
-    cmd = [
-        "opendataloader-pdf",
-        "--format",
-        "json,tagged-pdf",
-        "--output-dir",
-        str(output_dir),
-        "--image-output",
-        "external",
-        "--image-format",
-        "png",
-        "--image-dir",
-        str(image_dir),
-        str(input_pdf),
-    ]
-    logger.info("Running OpenDataLoader: %s", " ".join(cmd))
-    completed = subprocess.run(cmd, text=True, capture_output=True, check=False)
-    if completed.stdout:
-        logger.info("OpenDataLoader stdout:\n%s", completed.stdout)
-    if completed.stderr:
-        logger.info("OpenDataLoader stderr:\n%s", completed.stderr)
-    if completed.returncode != 0:
-        raise RuntimeError(f"OpenDataLoader failed with exit code {completed.returncode}")
+    cmd, hybrid_proc = build_opendataloader_command(input_pdf, output_dir, image_dir)
 
+    try:
+        logger.info("Running OpenDataLoader: %s", " ".join(cmd))
+        completed = subprocess.run(cmd, text=True, capture_output=True, check=False)
+
+        if completed.stdout:
+            logger.info("OpenDataLoader stdout:\n%s", completed.stdout)
+        if completed.stderr:
+            logger.info("OpenDataLoader stderr:\n%s", completed.stderr)
+
+        if completed.returncode != 0:
+            raise RuntimeError(f"OpenDataLoader failed with exit code {completed.returncode}")
+    finally:
+        stop_hybrid_backend(hybrid_proc)
 
 def newest_file(paths: Iterable[Path]) -> Path | None:
     files = [p for p in paths if p.is_file()]

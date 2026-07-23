@@ -1,6 +1,6 @@
 boto3==1.34.162
 botocore==1.34.162
-opendataloader-pdf>=2.0.0
+opendataloader-pdf[hybrid]>=2.0.0
 ocrmypdf>=16.0.0
 PyMuPDF==1.24.9
 pypdf==4.3.1

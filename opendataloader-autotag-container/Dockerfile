@@ -16,6 +16,7 @@ RUN apt-get update \
         jbig2dec \
     && rm -rf /var/lib/apt/lists/*
 
+# Hybrid mode dependencies are installed through opendataloader-pdf[hybrid].
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
