@@ -63,6 +63,8 @@ import boto3
 import logging
 import json
 import sys
+import time
+import random
 from botocore.exceptions import ClientError
 import sqlite3
 import pymupdf
@@ -177,6 +179,55 @@ def add_viewer_preferences(pdf_path, filename):
         writer.write(f)
     logger.info(f'Filename : {filename} | Viewer preferences added to the PDF')
 
+# Retry tuning for Adobe PDF Services rate limiting (HTTP 429 / TOO_MANY_REQUESTS).
+# When many PDFs are uploaded at once, Step Functions fans out up to max_concurrency
+# Adobe calls in parallel and Adobe throttles the excess. These retries let a throttled
+# task back off and succeed instead of failing the document outright.
+ADOBE_MAX_RETRIES = 5          # total attempts = 1 initial + up to 4 retries
+ADOBE_BASE_BACKOFF = 5         # seconds; grows exponentially per attempt
+ADOBE_MAX_BACKOFF = 60         # seconds; ceiling for any single wait
+
+
+def _is_rate_limited(exc):
+    """Return True if the Adobe SDK exception represents an HTTP 429 (TOO_MANY_REQUESTS)."""
+    return getattr(exc, "status_code", None) == 429
+
+
+def _run_with_adobe_retry(filename, operation_label, operation):
+    """
+    Run an Adobe PDF Services operation, retrying with exponential backoff + jitter
+    only when Adobe returns HTTP 429 (rate limiting). Any non-429 error is raised
+    immediately, preserving the existing fail-fast behavior for genuine document
+    problems and quota exhaustion (ServiceUsageException).
+
+    Args:
+        filename (str): The file being processed (for logging).
+        operation_label (str): Human-readable label, e.g. "Autotag" or "Extract".
+        operation (callable): Zero-arg function performing the Adobe call; its return
+            value is passed straight back to the caller.
+
+    Returns:
+        Whatever `operation()` returns on success.
+
+    Raises:
+        ServiceApiException: re-raised immediately for non-429 errors, or after the
+            final attempt when still rate limited. Other exception types propagate
+            unchanged.
+    """
+    for attempt in range(1, ADOBE_MAX_RETRIES + 1):
+        try:
+            return operation()
+        except ServiceApiException as e:
+            if not _is_rate_limited(e) or attempt == ADOBE_MAX_RETRIES:
+                raise
+            backoff = min(ADOBE_BASE_BACKOFF * (2 ** (attempt - 1)), ADOBE_MAX_BACKOFF)
+            backoff += random.uniform(0, backoff * 0.25)  # jitter so concurrent tasks de-sync
+            logging.warning(
+                f'Filename : {filename} | Adobe {operation_label} rate limited (429), '
+                f'attempt {attempt}/{ADOBE_MAX_RETRIES}; retrying in {backoff:.1f}s'
+            )
+            time.sleep(backoff)
+
 def autotag_pdf_with_options(filename, client_id, client_secret):
     """
     Auto-tags a PDF for accessibility using Adobe PDF Services.
@@ -223,9 +274,12 @@ def autotag_pdf_with_options(filename, client_id, client_secret):
         autotag_pdf_job = AutotagPDFJob(input_asset=input_asset,
                                         autotag_pdf_params=autotag_pdf_params)
 
-        # Submit the job and gets the job result
-        location = pdf_services.submit(autotag_pdf_job)
-        pdf_services_response = pdf_services.get_job_result(location, AutotagPDFResult)
+        # Submit the job and gets the job result, retrying on Adobe rate limiting (429)
+        def _submit_autotag():
+            location = pdf_services.submit(autotag_pdf_job)
+            return pdf_services.get_job_result(location, AutotagPDFResult)
+
+        pdf_services_response = _run_with_adobe_retry(filename, "Autotag", _submit_autotag)
 
         # Get content from the resulting asset(s)
         result_asset: CloudAsset = pdf_services_response.get_result().get_tagged_pdf()
@@ -290,9 +344,12 @@ def extract_api(filename, client_id, client_secret):
         # Creates a new job instance
         extract_pdf_job = ExtractPDFJob(input_asset=input_asset, extract_pdf_params=extract_pdf_params)
 
-        # Submit the job and gets the job result
-        location = pdf_services.submit(extract_pdf_job)
-        pdf_services_response = pdf_services.get_job_result(location, ExtractPDFResult)
+        # Submit the job and gets the job result, retrying on Adobe rate limiting (429)
+        def _submit_extract():
+            location = pdf_services.submit(extract_pdf_job)
+            return pdf_services.get_job_result(location, ExtractPDFResult)
+
+        pdf_services_response = _run_with_adobe_retry(filename, "Extract", _submit_extract)
 
         # Get content from the resulting asset(s)
         result_asset: CloudAsset = pdf_services_response.get_result().get_resource()
