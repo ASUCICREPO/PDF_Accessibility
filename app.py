@@ -34,6 +34,7 @@ class PDFAccessibility(Stack):
         # Get account and region for use throughout the stack
         account_id = Stack.of(self).account
         region = Stack.of(self).region
+        partition = Stack.of(self).partition
 
         # Docker images with zstd compression for faster Fargate cold starts
         # zstd decompresses ~2-3x faster than gzip, reducing container startup time
@@ -128,7 +129,7 @@ class PDFAccessibility(Stack):
         # Secrets Manager permissions - scoped to Adobe API credentials
         ecs_task_role.add_to_policy(iam.PolicyStatement(
             actions=["secretsmanager:GetSecretValue"],
-            resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/*"],
+            resources=[f"arn:{partition}:secretsmanager:{region}:{account_id}:secret:/myapp/*"],
         ))
         # Grant S3 read/write access to ECS Task Role
         pdf_processing_bucket.grant_read_write(ecs_task_execution_role)
@@ -320,7 +321,7 @@ class PDFAccessibility(Stack):
         pre_remediation_accessibility_checker.add_to_role_policy(
             iam.PolicyStatement(
             actions=["secretsmanager:GetSecretValue"],
-            resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/*"]
+            resources=[f"arn:{partition}:secretsmanager:{region}:{account_id}:secret:/myapp/*"]
         ))
         pdf_processing_bucket.grant_read_write(pre_remediation_accessibility_checker)
         pre_remediation_accessibility_checker.add_to_role_policy(cloudwatch_metrics_policy)
@@ -346,7 +347,7 @@ class PDFAccessibility(Stack):
         post_remediation_accessibility_checker.add_to_role_policy(
             iam.PolicyStatement(
             actions=["secretsmanager:GetSecretValue"],
-            resources=[f"arn:aws:secretsmanager:{region}:{account_id}:secret:/myapp/*"]
+            resources=[f"arn:{partition}:secretsmanager:{region}:{account_id}:secret:/myapp/*"]
         ))
         pdf_processing_bucket.grant_read_write(post_remediation_accessibility_checker)
         post_remediation_accessibility_checker.add_to_role_policy(cloudwatch_metrics_policy)

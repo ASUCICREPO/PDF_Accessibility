@@ -24,7 +24,7 @@ audit:
 # Accessibility remediation options
 remediate:
   severity_threshold: "minor"  # Matches the audit parameter name
-  model_id: "us.amazon.nova-lite-v1:0"
+  model_id: null  # null = region-aware default (see utils/aws_ids.py)
 
 # AWS service options
 aws:

@@ -42,14 +42,28 @@ const Database = require('better-sqlite3');
 
 const pipeline = promisify(stream.pipeline);
 
+const AWS_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || process.env.CDK_DEFAULT_REGION;
+
+/**
+ * Returns the Bedrock cross-region inference profile prefix for a region,
+ * e.g. 'us-gov.' for us-gov-west-1, 'us.' for us-east-1, 'eu.' for eu-west-1.
+ * Falls back to 'us.' for unrecognized regions.
+ */
+function inferenceProfilePrefix(region = "") {
+    if (region.startsWith("us-gov-")) return "us-gov.";
+    if (region.startsWith("eu-")) return "eu.";
+    if (region.startsWith("ap-")) return "apac.";
+    return "us.";
+}
+
 // ============================================================================
-// MODEL CONFIGURATION - Edit these values to change the AI models used
+// MODEL CONFIGURATION - Override with the env vars below to change the AI models used
 // ============================================================================
 // Model ID for generating alt text for images (requires vision capability)
-const MODEL_ID_ALT_TEXT = "us.amazon.nova-pro-v1:0";
+const MODEL_ID_ALT_TEXT = process.env.BEDROCK_MODEL_ID_ALT_TEXT || `${inferenceProfilePrefix(AWS_REGION)}amazon.nova-pro-v1:0`;
 
 // Model ID for generating alt text for hyperlinks (text-only, can use lighter model)
-const MODEL_ID_LINK_ALT_TEXT = "us.amazon.nova-lite-v1:0";
+const MODEL_ID_LINK_ALT_TEXT = process.env.BEDROCK_MODEL_ID_LINK_ALT_TEXT || `${inferenceProfilePrefix(AWS_REGION)}amazon.nova-lite-v1:0`;
 // ============================================================================
 
 // Configure logger
@@ -62,7 +76,6 @@ const logger = winston.createLogger({
 });
 
 // Create an S3 client instance.
-const AWS_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || process.env.CDK_DEFAULT_REGION;
 const s3Client = new S3Client({ region: AWS_REGION });
 
 function sleep(ms) {

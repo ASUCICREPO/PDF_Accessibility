@@ -2,16 +2,40 @@
     "Version": "2012-10-17",
     "Statement": [
         {
-            "Sid": "S3Access",
+            "Sid": "CodeBuildLogs",
             "Effect": "Allow",
-            "Action": "s3:*",
-            "Resource": ["arn:aws:s3:::cdk-*", "arn:aws:s3:::cdk-*/*", "arn:aws:s3:::pdf2html-*", "arn:aws:s3:::pdf2html-*/*"]
+            "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+            "Resource": "arn:aws:logs:*:*:log-group:/aws/codebuild/pdfremediation-*"
         },
         {
-            "Sid": "ECRAccess",
+            "Sid": "STSIdentity",
+            "Effect": "Allow",
+            "Action": "sts:GetCallerIdentity",
+            "Resource": "*"
+        },
+        {
+            "Sid": "AssumeCDKBootstrapRoles",
+            "Effect": "Allow",
+            "Action": "sts:AssumeRole",
+            "Resource": "arn:aws:iam::*:role/cdk-*"
+        },
+        {
+            "Sid": "CloudFormationStacks",
+            "Effect": "Allow",
+            "Action": "cloudformation:*",
+            "Resource": ["arn:aws:cloudformation:*:*:stack/CDKToolkit/*", "arn:aws:cloudformation:*:*:stack/Pdf2HtmlStack/*"]
+        },
+        {
+            "Sid": "S3Buckets",
+            "Effect": "Allow",
+            "Action": "s3:*",
+            "Resource": ["arn:aws:s3:::cdk-*", "arn:aws:s3:::pdf2html-bucket-*"]
+        },
+        {
+            "Sid": "ECRRepositories",
             "Effect": "Allow",
             "Action": "ecr:*",
-            "Resource": ["arn:aws:ecr:*:*:repository/cdk-*", "arn:aws:ecr:*:*:repository/pdf2html-*"]
+            "Resource": ["arn:aws:ecr:*:*:repository/cdk-*", "arn:aws:ecr:*:*:repository/pdf2html-lambda"]
         },
         {
             "Sid": "ECRAuth",
@@ -20,49 +44,20 @@
             "Resource": "*"
         },
         {
-            "Sid": "LambdaAccess",
+            "Sid": "CDKBootstrapRoles",
             "Effect": "Allow",
-            "Action": "lambda:*",
-            "Resource": ["arn:aws:lambda:*:*:function:Pdf2Html*", "arn:aws:lambda:*:*:function:pdf2html*"]
+            "Action": ["iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy", "iam:TagRole", "iam:UntagRole", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:UpdateAssumeRolePolicy", "iam:ListRoleTags"],
+            "Resource": "arn:aws:iam::*:role/cdk-*"
         },
         {
-            "Sid": "IAMRoleAccess",
+            "Sid": "PassCDKExecutionRoleToCloudFormation",
             "Effect": "Allow",
-            "Action": ["iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:PassRole", "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy", "iam:TagRole", "iam:UntagRole", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:UpdateAssumeRolePolicy", "iam:ListRoleTags"],
-            "Resource": ["arn:aws:iam::*:role/Pdf2Html*", "arn:aws:iam::*:role/pdf2html*", "arn:aws:iam::*:role/cdk-*"]
+            "Action": "iam:PassRole",
+            "Resource": "arn:aws:iam::*:role/cdk-*-cfn-exec-role-*",
+            "Condition": {"StringEquals": {"iam:PassedToService": "cloudformation.amazonaws.com"}}
         },
         {
-            "Sid": "IAMPolicyAccess",
-            "Effect": "Allow",
-            "Action": ["iam:CreatePolicy", "iam:DeletePolicy", "iam:GetPolicy", "iam:GetPolicyVersion", "iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:ListPolicyVersions"],
-            "Resource": "arn:aws:iam::*:policy/*"
-        },
-        {
-            "Sid": "CloudFormationAccess",
-            "Effect": "Allow",
-            "Action": "cloudformation:*",
-            "Resource": ["arn:aws:cloudformation:*:*:stack/Pdf2Html*/*", "arn:aws:cloudformation:*:*:stack/pdf2html*/*", "arn:aws:cloudformation:*:*:stack/CDKToolkit/*"]
-        },
-        {
-            "Sid": "BedrockAccess",
-            "Effect": "Allow",
-            "Action": ["bedrock:CreateDataAutomationProject", "bedrock:GetDataAutomationProject", "bedrock:DeleteDataAutomationProject", "bedrock:UpdateDataAutomationProject", "bedrock:ListDataAutomationProjects"],
-            "Resource": "*"
-        },
-        {
-            "Sid": "LogsAccess",
-            "Effect": "Allow",
-            "Action": "logs:*",
-            "Resource": ["arn:aws:logs:*:*:log-group:/aws/codebuild/*", "arn:aws:logs:*:*:log-group:/aws/lambda/Pdf2Html*"]
-        },
-        {
-            "Sid": "STSAccess",
-            "Effect": "Allow",
-            "Action": ["sts:GetCallerIdentity", "sts:AssumeRole"],
-            "Resource": "*"
-        },
-        {
-            "Sid": "SSMAccess",
+            "Sid": "CDKBootstrapVersionParameter",
             "Effect": "Allow",
             "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:PutParameter"],
             "Resource": "arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"
@@ -70,8 +65,8 @@
         {
             "Sid": "CodeConnectionsAccess",
             "Effect": "Allow",
-            "Action": ["codeconnections:UseConnection", "codeconnections:GetConnection"],
-            "Resource": "arn:aws:codeconnections:*:*:connection/*"
+            "Action": ["codeconnections:GetConnectionToken", "codeconnections:GetConnection", "codeconnections:UseConnection"],
+            "Resource": "arn:*:codeconnections:*:*:connection/*"
         }
     ]
 }

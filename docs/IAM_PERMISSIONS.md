@@ -6,10 +6,12 @@ Deployment policies are maintained as standalone JSON files in [`policies/`](../
 
 | File | Type | Purpose |
 |------|------|---------|
-| [`deploy-caller-policy.json`](../policies/deploy-caller-policy.json) | Identity policy | Must be manually attached to the IAM user/role running `deploy.sh` |
+| [`deploy-policy.json`](../policies/deploy-policy.json) | Identity policy | Must be manually attached to the IAM user/role running `deploy.sh` |
 | [`pdf2pdf-codebuild-policy.json`](../policies/pdf2pdf-codebuild-policy.json) | Identity policy | Loaded by `deploy.sh` and attached to the CodeBuild service role (pdf2pdf) |
 | [`pdf2html-codebuild-policy.json`](../policies/pdf2html-codebuild-policy.json) | Identity policy | Loaded by `deploy.sh` and attached to the CodeBuild service role (pdf2html) |
 | [`codebuild-trust-policy.json`](../policies/codebuild-trust-policy.json) | Trust policy | Loaded by `deploy.sh` when creating the CodeBuild service role |
+
+The policy files are written for the commercial partition (`arn:aws:`). `deploy.sh` detects the partition of the account it runs in and rewrites the ARNs automatically (e.g. to `arn:aws-us-gov:` in AWS GovCloud) before creating the CodeBuild policies. The caller policy is attached by hand, so it must be rewritten by hand — see [AWS GovCloud](#aws-govcloud).
 
 Validate any policy with:
 ```bash
@@ -22,20 +24,23 @@ aws accessanalyzer validate-policy \
 
 ## Caller Permissions (User Running `deploy.sh`)
 
-The user or role that runs `deploy.sh` makes AWS API calls *before* CodeBuild starts. This includes both the backend deploy script and the UI deploy script (from the [PDF_accessability_UI](https://github.com/ASUCICREPO/PDF_accessability_UI) repo).
+The user or role that runs `deploy.sh` makes AWS API calls *before* CodeBuild starts. This includes both the backend deploy script and the UI deploy script (from the [PDF_accessability_UI](https://github.com/ASUCICREPO/PDF_accessability_UI) repo). Users with `AdministratorAccess` already have everything below.
 
 See [`policies/deploy-policy.json`](../policies/deploy-policy.json) for the full document.
 
 | Sid | Actions | Resources | Purpose |
 |-----|---------|-----------|---------|
 | CloudShellAccess | `cloudshell:*` | `*` | Access AWS CloudShell environment |
-| STSAccess | `sts:GetCallerIdentity` | `*` | Verify AWS credentials |
+| STSAccess | `sts:GetCallerIdentity` | `*` | Verify AWS credentials and detect the partition |
 | SecretsManagerAccess | `secretsmanager:CreateSecret`, `UpdateSecret` | `secret:/myapp/*` | Store Adobe API credentials (pdf2pdf only) |
 | BedrockDataAutomationAccess | `bedrock:CreateDataAutomationProject` | `*` | Create BDA project (pdf2html only) |
-| IAMRoleManagement | `iam:GetRole`, `CreateRole`, `CreatePolicy`, `GetPolicy`, `AttachRolePolicy`, `PutRolePolicy` | `role/*-codebuild-service-role`, `role/pdf-ui-*-service-role`, `policy/*` | Create CodeBuild service roles and policies (backend + UI) |
-| IAMPassRoleToCodeBuild | `iam:PassRole` | `role/*-codebuild-service-role`, `role/pdf-ui-*-service-role` (conditioned on `iam:PassedToService`: codebuild) | Pass role to CodeBuild projects |
+| IAMRoleManagement | `iam:GetRole`, `CreateRole` | `role/pdfremediation-*-codebuild-service-role`, `role/pdf-ui-*-service-role` | Create CodeBuild service roles (backend + UI) |
+| IAMPolicyManagement | `iam:CreatePolicy`, `GetPolicy` | `policy/pdfremediation-*` | Create the backend CodeBuild policy from `policies/` |
+| IAMAttachOwnPolicyToCodeBuildRole | `iam:AttachRolePolicy` | `role/pdfremediation-*-codebuild-service-role` (conditioned on `iam:PolicyARN`: `policy/pdfremediation-*`) | Attach only that policy to the backend CodeBuild role |
+| IAMUIRoleInlinePolicy | `iam:PutRolePolicy` | `role/pdf-ui-*-service-role` | Inline policy for the UI CodeBuild role |
+| IAMPassRoleToCodeBuild | `iam:PassRole` | `role/pdfremediation-*-codebuild-service-role`, `role/pdf-ui-*-service-role` (conditioned on `iam:PassedToService`: codebuild) | Pass role to CodeBuild projects |
 | CodeBuildAccess | `codebuild:CreateProject`, `StartBuild`, `BatchGetBuilds` | `project/pdfremediation-*`, `project/pdf-ui-*` | Create and monitor CodeBuild projects (backend + UI) |
-| CloudWatchLogsAccess | `logs:DescribeLogStreams`, `GetLogEvents` | `log-group:/aws/codebuild/*` | Read build logs on failure |
+| CloudWatchLogsAccess | `logs:DescribeLogStreams`, `GetLogEvents`, `FilterLogEvents` | `log-group:/aws/codebuild/*` | Show build errors on failure |
 | CloudFormationReadAccess | `cloudformation:DescribeStacks`, `ListStacks` | `*` | Retrieve stack outputs (bucket names, Cognito IDs, Amplify URLs) |
 | S3ListBuckets | `s3:ListAllMyBuckets` | `*` | Find deployed bucket by name pattern |
 
@@ -45,47 +50,67 @@ See [`policies/deploy-policy.json`](../policies/deploy-policy.json) for the full
 
 The deploy script (`deploy.sh`) creates a CodeBuild service role and attaches a scoped IAM policy. The trust policy and identity policies are read from the `policies/` directory.
 
+The CodeBuild role does **not** create the application resources (VPC, ECS, Lambda, Step Functions, IAM roles, etc.) itself. `cdk deploy` assumes the CDK bootstrap roles (`cdk-*-deploy-role`, `cdk-*-file-publishing-role`, `cdk-*-image-publishing-role`), and CloudFormation creates the stack resources with the bootstrap `cdk-*-cfn-exec-role`. The CodeBuild role therefore only needs to:
+
+1. Write its own build logs.
+2. Run `cdk bootstrap`, which creates or updates the `CDKToolkit` stack (an S3 bucket, an ECR repository, IAM roles and an SSM parameter, all named `cdk-*`).
+3. Assume the CDK bootstrap roles for `cdk deploy`.
+4. (PDF-to-HTML only) Create the S3 bucket and ECR repository and push the Lambda image, which the buildspec does before running CDK.
+
 ### PDF-to-PDF Deployment Policy
 
 See [`policies/pdf2pdf-codebuild-policy.json`](../policies/pdf2pdf-codebuild-policy.json) for the full document.
 
 | Sid | Actions | Resources | Purpose |
 |-----|---------|-----------|---------|
-| S3Access | `s3:*` | `cdk-*`, `pdfaccessibility*` | CDK assets and application bucket |
-| ECRAccess | `ecr:*` | `repository/cdk-*` | CDK ECR image assets |
+| CodeBuildLogs | `logs:CreateLogGroup`, `CreateLogStream`, `PutLogEvents` | `log-group:/aws/codebuild/pdfremediation-*` | CodeBuild build logs |
+| STSIdentity | `sts:GetCallerIdentity` | `*` | Resolve account for CDK |
+| AssumeCDKBootstrapRoles | `sts:AssumeRole` | `role/cdk-*` | `cdk deploy` via the bootstrap roles |
+| CloudFormationStacks | `cloudformation:*` | `stack/CDKToolkit/*`, `stack/PDFAccessibility*/*` | Bootstrap stack; app stack if CDK falls back to the build role's own credentials |
+| CDKBootstrapBucket | `s3:*` | `cdk-*` | CDK assets bucket (bootstrap) |
+| CDKBootstrapRepository | `ecr:*` | `repository/cdk-*` | CDK container assets repository (bootstrap) |
 | ECRAuth | `ecr:GetAuthorizationToken` | `*` | Docker login to ECR |
-| LambdaAccess | `lambda:*` | `function:*` | Create/update Lambda functions |
-| ECSAccess | `ecs:*` | `*` | ECS cluster, task definitions, services |
-| EC2Access | `ec2:*` | `*` | VPC, subnets, NAT gateways, endpoints |
-| StepFunctionsAccess | `states:*` | `stateMachine:*` | Step Functions state machines |
-| IAMRoleAccess | 16 IAM role actions | `role/PDFAccessibility*`, `role/cdk-*` | Stack and CDK roles |
-| IAMPolicyAccess | 7 IAM policy actions | `policy/*` | Managed policies |
-| CloudFormationAccess | `cloudformation:*` | `PDFAccessibility*/*`, `CDKToolkit/*` | CDK stack deployment |
-| LogsAccess | `logs:*` | CodeBuild, Lambda, ECS, Step Functions log groups | CloudWatch Logs |
-| CloudWatchAccess | 4 CloudWatch actions | `*` | Metrics and dashboards |
-| SecretsManagerAccess | 4 Secrets Manager actions | `secret:/myapp/*` | Adobe API credentials |
-| STSAccess | `GetCallerIdentity`, `AssumeRole` | `*` | Identity and CDK role assumption |
-| SSMAccess | 3 SSM actions | `parameter/cdk-bootstrap/*` | CDK bootstrap parameters |
-| CodeConnectionsAccess | `UseConnection`, `GetConnection` | `connection/*` | GitHub source connection |
+| CDKBootstrapRoles | 14 IAM role actions | `role/cdk-*` | Create/update bootstrap roles |
+| PassCDKExecutionRoleToCloudFormation | `iam:PassRole` | `role/cdk-*-cfn-exec-role-*` (conditioned on `iam:PassedToService`: cloudformation) | Pass the CDK execution role to CloudFormation |
+| CDKBootstrapVersionParameter | `ssm:GetParameter`, `GetParameters`, `PutParameter` | `parameter/cdk-bootstrap/*` | CDK bootstrap version parameter |
+| CodeConnectionsAccess | `codeconnections:GetConnectionToken`, `GetConnection`, `UseConnection` | `connection/*` (any partition) | Only used if the account has a GitHub source credential configured through CodeConnections |
 
 ### PDF-to-HTML Deployment Policy
 
 See [`policies/pdf2html-codebuild-policy.json`](../policies/pdf2html-codebuild-policy.json) for the full document.
 
+Same as PDF-to-PDF, except:
+
 | Sid | Actions | Resources | Purpose |
 |-----|---------|-----------|---------|
-| S3Access | `s3:*` | `cdk-*`, `pdf2html-*` | CDK assets and application bucket |
-| ECRAccess | `ecr:*` | `repository/cdk-*`, `repository/pdf2html-*` | CDK and Lambda container images |
-| ECRAuth | `ecr:GetAuthorizationToken` | `*` | Docker login to ECR |
-| LambdaAccess | `lambda:*` | `function:Pdf2Html*`, `function:pdf2html*` | Create/update Lambda functions |
-| IAMRoleAccess | 16 IAM role actions | `role/Pdf2Html*`, `role/pdf2html*`, `role/cdk-*` | Stack and CDK roles |
-| IAMPolicyAccess | 7 IAM policy actions | `policy/*` | Managed policies |
-| CloudFormationAccess | `cloudformation:*` | `Pdf2Html*/*`, `pdf2html*/*`, `CDKToolkit/*` | CDK stack deployment |
-| BedrockAccess | 5 BDA project actions | `*` | Create/manage Bedrock Data Automation project |
-| LogsAccess | `logs:*` | CodeBuild and Lambda log groups | CloudWatch Logs |
-| STSAccess | `GetCallerIdentity`, `AssumeRole` | `*` | Identity and CDK role assumption |
-| SSMAccess | 3 SSM actions | `parameter/cdk-bootstrap/*` | CDK bootstrap parameters |
-| CodeConnectionsAccess | `UseConnection`, `GetConnection` | `connection/*` | GitHub source connection |
+| CloudFormationStacks | `cloudformation:*` | `stack/CDKToolkit/*`, `stack/Pdf2HtmlStack/*` | Bootstrap stack and app stack |
+| S3Buckets | `s3:*` | `cdk-*`, `pdf2html-bucket-*` | CDK assets bucket and the application bucket created by the buildspec |
+| ECRRepositories | `ecr:*` | `repository/cdk-*`, `repository/pdf2html-lambda` | CDK assets repository and the Lambda image repository created by the buildspec |
+
+---
+
+## AWS GovCloud
+
+The solutions deploy to AWS GovCloud (US) with the same `deploy.sh`. Partition-specific ARNs, Bedrock inference profile IDs and the BDA profile ARN are derived from the region at deploy and run time.
+
+Before deploying:
+
+1. **Caller policy** — if you are not using an administrator role, rewrite the partition in the caller policy before attaching it:
+   ```bash
+   sed "s/arn:aws:/arn:aws-us-gov:/g" policies/deploy-policy.json > /tmp/deploy-policy.json
+   aws iam create-policy --policy-name pdf-accessibility-deploy \
+     --policy-document file:///tmp/deploy-policy.json
+   ```
+   Then attach the policy to the user or role that runs `deploy.sh`.
+2. **Bedrock model access** — confirm the models used by the solution are available and enabled:
+   ```bash
+   aws bedrock list-inference-profiles --region us-gov-west-1 \
+     --query 'inferenceProfileSummaries[?contains(inferenceProfileId, `nova`)].inferenceProfileId'
+   ```
+   The solutions default to `us-gov.amazon.nova-pro-v1:0` and `us-gov.amazon.nova-lite-v1:0` in GovCloud. To use different IDs, set these environment variables:
+   - `BEDROCK_MODEL_ID` on the title generator Lambda (pdf2pdf) and on the `Pdf2HtmlPipeline` Lambda (pdf2html).
+   - `BEDROCK_MODEL_ID_ALT_TEXT` and `BEDROCK_MODEL_ID_LINK_ALT_TEXT` on the alt-text ECS task (pdf2pdf).
+3. **BDA profile (PDF-to-HTML)** — the default is `arn:aws-us-gov:bedrock:<region>:<account>:data-automation-profile/us-gov.data-automation-v1`. To override it, set `BDA_PROFILE_ARN` on the `Pdf2HtmlPipeline` Lambda.
 
 ---
 
@@ -120,7 +145,7 @@ These permissions are created by the CDK stack (`app.py`) and attached to roles 
       "Sid": "S3BucketAccess",
       "Effect": "Allow",
       "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-      "Resource": ["arn:aws:s3:::${BucketName}", "arn:aws:s3:::${BucketName}/*"]
+      "Resource": ["arn:${Partition}:s3:::${BucketName}", "arn:${Partition}:s3:::${BucketName}/*"]
     },
     {
       "Sid": "ComprehendLanguageDetection",
@@ -132,7 +157,7 @@ These permissions are created by the CDK stack (`app.py`) and attached to roles 
       "Sid": "SecretsManagerAccess",
       "Effect": "Allow",
       "Action": ["secretsmanager:GetSecretValue"],
-      "Resource": "arn:aws:secretsmanager:${Region}:${AccountId}:secret:/myapp/*"
+      "Resource": "arn:${Partition}:secretsmanager:${Region}:${AccountId}:secret:/myapp/*"
     }
   ]
 }
@@ -182,17 +207,15 @@ These permissions are created by the CDK stack (`pdf2html/cdk/lib/pdf2html-stack
         "s3:ListObjectsV2", "s3:GetBucketLocation",
         "s3:GetObjectVersion", "s3:GetBucketPolicy"
       ],
-      "Resource": ["arn:aws:s3:::${BucketName}", "arn:aws:s3:::${BucketName}/*"]
+      "Resource": ["arn:${Partition}:s3:::${BucketName}", "arn:${Partition}:s3:::${BucketName}/*"]
     },
     {
       "Sid": "BedrockModelInvocation",
       "Effect": "Allow",
       "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
       "Resource": [
-        "arn:aws:bedrock:${Region}::foundation-model/us.amazon.nova-lite-v1:0",
-        "arn:aws:bedrock:${Region}::foundation-model/amazon.nova-lite-v1:0",
-        "arn:aws:bedrock:${Region}::foundation-model/us.amazon.nova-pro-v1:0",
-        "arn:aws:bedrock:${Region}::foundation-model/amazon.nova-pro-v1:0"
+        "arn:${Partition}:bedrock:*::foundation-model/amazon.nova-*",
+        "arn:${Partition}:bedrock:*:${AccountId}:inference-profile/*amazon.nova-*"
       ]
     },
     {
@@ -205,20 +228,20 @@ These permissions are created by the CDK stack (`pdf2html/cdk/lib/pdf2html-stack
       ],
       "Resource": [
         "${BdaProjectArn}",
-        "arn:aws:bedrock:${Region}:${AccountId}:data-automation-invocation/*"
+        "arn:${Partition}:bedrock:${Region}:${AccountId}:data-automation-invocation/*"
       ]
     },
     {
       "Sid": "BedrockDataAutomationProfile",
       "Effect": "Allow",
       "Action": ["bedrock:InvokeDataAutomationAsync"],
-      "Resource": "arn:aws:bedrock:*:${AccountId}:data-automation-profile/*"
+      "Resource": "arn:${Partition}:bedrock:*:${AccountId}:data-automation-profile/*"
     },
     {
       "Sid": "CloudWatchLogs",
       "Effect": "Allow",
       "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
-      "Resource": "arn:aws:logs:${Region}:${AccountId}:log-group:/aws/lambda/Pdf2HtmlPipeline:*"
+      "Resource": "arn:${Partition}:logs:${Region}:${AccountId}:log-group:/aws/lambda/Pdf2HtmlPipeline:*"
     }
   ]
 }
@@ -232,7 +255,7 @@ These permissions are created by the CDK stack (`pdf2html/cdk/lib/pdf2html-stack
 
 ### Principle of Least Privilege
 - Runtime roles use scoped actions and resource ARNs wherever AWS supports them.
-- Deployment (CodeBuild) policies use broader wildcards (`s3:*`, `lambda:*`, etc.) because CDK needs to create, update, and delete resources. These are scoped to specific resource name patterns.
+- Deployment (CodeBuild) policies only cover the CDK bootstrap resources (`cdk-*`) and, for PDF-to-HTML, the bucket and ECR repository the buildspec creates. Wildcard actions (`s3:*`, `ecr:*`, `cloudformation:*`) are scoped to those resource name patterns. Application resources are created by CloudFormation through the CDK bootstrap execution role.
 
 ### Services Without Resource-Level Permissions
 These actions require `Resource: "*"`:
@@ -240,9 +263,9 @@ These actions require `Resource: "*"`:
 - `comprehend:DetectDominantLanguage`
 - `ecr:GetAuthorizationToken`
 - `sts:GetCallerIdentity`
-- EC2 VPC-related describe operations
-- ECS cluster and task definition operations
-- Bedrock Data Automation project management actions
+- `s3:ListAllMyBuckets`
+- `cloudformation:ListStacks`
+- `bedrock:CreateDataAutomationProject`
 
 ### Sensitive Data Protection
 - Adobe API credentials stored in AWS Secrets Manager at `/myapp/client_credentials`
@@ -258,10 +281,11 @@ These actions require `Resource: "*"`:
 
 1. **CDK Bootstrap Failures** — Ensure CloudFormation and S3 permissions for `cdk-*` resources
 2. **ECR Push Failures** — Verify ECR repository permissions and `ecr:GetAuthorizationToken`
-3. **Lambda Deployment Failures** — Check Lambda and IAM role creation permissions
+3. **Stack Resource Failures (Lambda, ECS, VPC, IAM, ...)** — These are created by CloudFormation using the CDK bootstrap execution role, not the CodeBuild role. Check the stack events in the CloudFormation console, and confirm the account is bootstrapped (`CDKToolkit` stack exists)
 4. **Step Function Execution Failures** — Verify Step Functions and ECS permissions
 5. **Bedrock Access Denied** — Ensure model access is enabled in the console and IAM policy includes correct model ARNs
-6. **BDA Project Creation Failures** — Verify `bedrock:CreateDataAutomationProject` in the pdf2html policy
+6. **BDA Project Creation Failures** — Verify `bedrock:CreateDataAutomationProject` in the caller policy (`deploy-policy.json`)
+7. **`Partition "aws" is not valid for resource`** — An ARN was written for the commercial partition while deploying to AWS GovCloud. See [AWS GovCloud](#aws-govcloud)
 
 ### Permission Validation
 ```bash
@@ -271,7 +295,10 @@ aws bedrock list-foundation-models --region your-region
 ```
 
 ### Model ARN Formats
-- Foundation models: `arn:aws:bedrock:${Region}::foundation-model/${ModelId}`
-- Data automation projects: `arn:aws:bedrock:${Region}:${AccountId}:data-automation-project/${ProjectId}`
-- Data automation invocations: `arn:aws:bedrock:${Region}:${AccountId}:data-automation-invocation/${JobId}`
-- Data automation profiles: `arn:aws:bedrock:${Region}:${AccountId}:data-automation-profile/${ProfileId}`
+`${Partition}` is `aws` in commercial regions and `aws-us-gov` in AWS GovCloud.
+
+- Foundation models: `arn:${Partition}:bedrock:${Region}::foundation-model/${ModelId}`
+- Cross-region inference profiles: `arn:${Partition}:bedrock:${Region}:${AccountId}:inference-profile/${Prefix}.${ModelId}` (`Prefix` is `us`, `us-gov`, `eu` or `apac`)
+- Data automation projects: `arn:${Partition}:bedrock:${Region}:${AccountId}:data-automation-project/${ProjectId}`
+- Data automation invocations: `arn:${Partition}:bedrock:${Region}:${AccountId}:data-automation-invocation/${JobId}`
+- Data automation profiles: `arn:${Partition}:bedrock:${Region}:${AccountId}:data-automation-profile/${ProfileId}`

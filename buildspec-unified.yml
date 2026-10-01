@@ -192,7 +192,10 @@ phases:
     commands:
       - echo "Post-build phase completed on $(date)"
       - |
-        if [ "$DEPLOYMENT_TYPE" = "pdf2html" ]; then
+        # post_build runs even when build fails; only report success if it actually succeeded
+        if [ "$CODEBUILD_BUILD_SUCCEEDING" != "1" ]; then
+          echo "Deployment FAILED - see the errors in the BUILD phase above."
+        elif [ "$DEPLOYMENT_TYPE" = "pdf2html" ]; then
           echo "PDF-to-HTML deployment completed successfully!"
           echo "S3 Bucket: $BUCKET_NAME"
           echo "BDA Project: $BDA_PROJECT_ARN"

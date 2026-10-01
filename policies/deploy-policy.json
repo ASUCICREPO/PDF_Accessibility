@@ -33,24 +33,45 @@
             "Effect": "Allow",
             "Action": [
                 "iam:GetRole",
-                "iam:CreateRole",
-                "iam:CreatePolicy",
-                "iam:GetPolicy",
-                "iam:AttachRolePolicy",
-                "iam:PutRolePolicy"
+                "iam:CreateRole"
             ],
             "Resource": [
-                "arn:aws:iam::*:role/*-codebuild-service-role",
-                "arn:aws:iam::*:role/pdf-ui-*-service-role",
-                "arn:aws:iam::*:policy/*"
+                "arn:aws:iam::*:role/pdfremediation-*-codebuild-service-role",
+                "arn:aws:iam::*:role/pdf-ui-*-service-role"
             ]
+        },
+        {
+            "Sid": "IAMPolicyManagement",
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreatePolicy",
+                "iam:GetPolicy"
+            ],
+            "Resource": "arn:aws:iam::*:policy/pdfremediation-*"
+        },
+        {
+            "Sid": "IAMAttachOwnPolicyToCodeBuildRole",
+            "Effect": "Allow",
+            "Action": "iam:AttachRolePolicy",
+            "Resource": "arn:aws:iam::*:role/pdfremediation-*-codebuild-service-role",
+            "Condition": {
+                "ArnLike": {
+                    "iam:PolicyARN": "arn:aws:iam::*:policy/pdfremediation-*"
+                }
+            }
+        },
+        {
+            "Sid": "IAMUIRoleInlinePolicy",
+            "Effect": "Allow",
+            "Action": "iam:PutRolePolicy",
+            "Resource": "arn:aws:iam::*:role/pdf-ui-*-service-role"
         },
         {
             "Sid": "IAMPassRoleToCodeBuild",
             "Effect": "Allow",
             "Action": "iam:PassRole",
             "Resource": [
-                "arn:aws:iam::*:role/*-codebuild-service-role",
+                "arn:aws:iam::*:role/pdfremediation-*-codebuild-service-role",
                 "arn:aws:iam::*:role/pdf-ui-*-service-role"
             ],
             "Condition": {
@@ -77,7 +98,8 @@
             "Effect": "Allow",
             "Action": [
                 "logs:DescribeLogStreams",
-                "logs:GetLogEvents"
+                "logs:GetLogEvents",
+                "logs:FilterLogEvents"
             ],
             "Resource": "arn:aws:logs:*:*:log-group:/aws/codebuild/*"
         },

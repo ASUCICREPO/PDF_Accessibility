@@ -15,6 +15,7 @@ from typing import Optional
 from content_accessibility_utility_on_aws.utils.logging_helper import setup_logger
 from content_accessibility_utility_on_aws.utils.usage_tracker import SessionUsageTracker
 from content_accessibility_utility_on_aws.utils.image_utils import resize_image
+from content_accessibility_utility_on_aws.utils.aws_ids import default_model_id
 
 # Set up module-level logger
 logger = setup_logger(__name__)
@@ -39,17 +40,16 @@ class BedrockClient:
 
     def __init__(
         self,
-        model_id: str = "us.amazon.nova-lite-v1:0",
+        model_id: Optional[str] = None,
         profile: Optional[str] = None,
     ):
         """
         Initialize the Bedrock client.
 
         Args:
-            model_id: The ID of the Bedrock model to use
+            model_id: The ID of the Bedrock model to use (default: region-aware Nova Lite)
             profile: AWS profile name to use for authentication
         """
-        self.model_id = model_id
         self.profile = profile
         try:
             # Create a boto3 session with the provided profile
@@ -69,8 +69,9 @@ class BedrockClient:
                 session = boto3.Session()
 
             self.client = session.client("bedrock-runtime")
+            self.model_id = model_id or default_model_id(session.region_name)
             logger.debug(
-                f"Initialized Bedrock client with model: {model_id}, profile: {profile}"
+                f"Initialized Bedrock client with model: {self.model_id}, profile: {profile}"
             )
         except Exception as e:
             logger.warning(f"Failed to initialize Bedrock client: {e}")

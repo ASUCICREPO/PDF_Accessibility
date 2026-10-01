@@ -22,6 +22,10 @@ from content_accessibility_utility_on_aws.utils.logging_helper import (
     setup_logger,
 )
 from content_accessibility_utility_on_aws.utils.usage_tracker import SessionUsageTracker
+from content_accessibility_utility_on_aws.utils.aws_ids import (
+    inference_profile_prefix,
+    partition_for_region,
+)
 from content_accessibility_utility_on_aws.pdf2html.services.page_builder import build_html_data
 
 # Set up module-level logger
@@ -265,13 +269,15 @@ class BDAClient:
             logger.debug(f"Using profile ARN from environment: {env_profile}")
             return env_profile
 
-        # Construct the standard profile ARN using region and account ID
+        # Construct the standard profile ARN using partition, region and account ID
         try:
             region = self.session.region_name
             identity = self.sts_client.get_caller_identity()
             account_id = identity["Account"]
+            partition = partition_for_region(region)
+            prefix = inference_profile_prefix(region)
 
-            profile_arn = f"arn:aws:bedrock:{region}:{account_id}:data-automation-profile/us.data-automation-v1"
+            profile_arn = f"arn:{partition}:bedrock:{region}:{account_id}:data-automation-profile/{prefix}data-automation-v1"
             logger.debug(f"Using constructed standard profile ARN: {profile_arn}")
 
             return profile_arn

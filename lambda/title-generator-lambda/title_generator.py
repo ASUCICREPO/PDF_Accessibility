@@ -41,6 +41,21 @@ def exponential_backoff_retry(
             time.sleep(sleep_time)
 
 
+def inference_profile_prefix(region):
+    """
+    Returns the Bedrock cross-region inference profile prefix for a region,
+    e.g. 'us-gov.' for us-gov-west-1, 'us.' for us-east-1, 'eu.' for eu-west-1.
+    Falls back to 'us.' for unrecognized regions.
+    """
+    if region.startswith('us-gov-'):
+        return 'us-gov.'
+    if region.startswith('eu-'):
+        return 'eu.'
+    if region.startswith('ap-'):
+        return 'apac.'
+    return 'us.'
+
+
 def download_file_from_s3(bucket_name, file_key, local_path, filename):
     s3 = boto3.client('s3')
     # Wrap the S3 download_file call with exponential_backoff_retry
@@ -142,22 +157,10 @@ def extract_text_from_pdf(pdf_document):
 
 def generate_title(extracted_text, current_title):
     session = boto3.Session()
-
-    # Retrieve the current region and account ID (wrapped in exponential_backoff_retry for safety)
     region = session.region_name
 
-    sts_client = session.client('sts')
-    account_id = exponential_backoff_retry(
-        sts_client.get_caller_identity,
-        retries=3,
-        base_delay=1,
-        backoff_factor=2
-    )['Account']
-
-    # Define the model name and version
-    model_name = 'us.amazon.nova-pro-v1:0'
-    # Construct the model_id
-    model_id = f'arn:aws:bedrock:{region}:{account_id}:inference-profile/{model_name}'
+    # Cross-region inference profile ID; works in commercial and GovCloud partitions
+    model_id = os.environ.get('BEDROCK_MODEL_ID') or f'{inference_profile_prefix(region)}amazon.nova-pro-v1:0'
     print(f"(generate_title) Model ID: {model_id}")
 
     client = boto3.client('bedrock-runtime', region_name=region)

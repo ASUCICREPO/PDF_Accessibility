@@ -230,8 +230,8 @@ def _add_remediate_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--model-id",
-        default="us.amazon.nova-lite-v1:0",
-        help="Bedrock model ID to use for remediation",
+        default=None,
+        help="Bedrock model ID to use for remediation (default: region's Nova Lite inference profile)",
     )
     parser.add_argument(
         "--severity-threshold",
@@ -344,8 +344,8 @@ def _add_process_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--model-id",
-        default="us.amazon.nova-lite-v1:0",
-        help="Bedrock model ID to use for remediation",
+        default=None,
+        help="Bedrock model ID to use for remediation (default: region's Nova Lite inference profile)",
     )
 
     # Shared options

@@ -200,13 +200,18 @@ deploy_backend_solution() {
             POLICY_FILE="${POLICY_DIR}/pdf2html-codebuild-policy.json"
         fi
         
+        # Policy files use the commercial partition; rewrite ARNs for the current partition (e.g. aws-us-gov)
+        RENDERED_POLICY_FILE=$(mktemp)
+        sed "s/arn:aws:/arn:${PARTITION}:/g" "$POLICY_FILE" > "$RENDERED_POLICY_FILE"
+
         # Create the policy
         print_status "📋 Creating IAM policy: $POLICY_NAME"
         POLICY_RESPONSE=$(aws iam create-policy \
             --policy-name "$POLICY_NAME" \
-            --policy-document "file://${POLICY_FILE}" \
+            --policy-document "file://${RENDERED_POLICY_FILE}" \
             --description "Minimal IAM policy for $DEPLOYMENT_TYPE CodeBuild deployment" 2>/dev/null || \
-            aws iam get-policy --policy-arn "arn:aws:iam::$ACCOUNT_ID:policy/$POLICY_NAME" 2>/dev/null)
+            aws iam get-policy --policy-arn "arn:${PARTITION}:iam::$ACCOUNT_ID:policy/$POLICY_NAME" 2>/dev/null)
+        rm -f "$RENDERED_POLICY_FILE"
         
         if [ $? -eq 0 ]; then
             POLICY_ARN=$(echo "$POLICY_RESPONSE" | jq -r '.Policy.Arn // .Policy.Arn')
@@ -242,13 +247,11 @@ deploy_backend_solution() {
         BUILD_IMAGE="aws/codebuild/amazonlinux-x86_64-standard:5.0"
         COMPUTE_TYPE="BUILD_GENERAL1_SMALL"
         PRIVILEGED_MODE="true"
-        SOURCE_VERSION="main"
         BUILDSPEC_FILE="buildspec-unified.yml"
     else
         BUILD_IMAGE="aws/codebuild/amazonlinux2-x86_64-standard:5.0"
         COMPUTE_TYPE="BUILD_GENERAL1_LARGE"
         PRIVILEGED_MODE="true"
-        SOURCE_VERSION="main"
         BUILDSPEC_FILE="buildspec-unified.yml"
     fi
 
@@ -359,8 +362,21 @@ deploy_backend_solution() {
                 
                 LATEST_STREAM=$(aws logs describe-log-streams --log-group-name $LOG_GROUP --order-by LastEventTime --descending --max-items 1 --query 'logStreams[0].logStreamName' --output text 2>/dev/null || echo "")
                 
+                FAILED_PHASES=$(aws codebuild batch-get-builds --ids "$BUILD_ID" \
+                    --query 'builds[0].phases[?phaseStatus==`FAILED`].phaseType' --output text 2>/dev/null || echo "")
+                if [ -n "$FAILED_PHASES" ] && [ "$FAILED_PHASES" != "None" ]; then
+                    print_error "Failed phase(s): $FAILED_PHASES"
+                fi
+
                 if [ -n "$LATEST_STREAM" ] && [ "$LATEST_STREAM" != "None" ]; then
-                    print_error "Recent build logs:"
+                    # The failed phase's command block is echoed back at the end of the log,
+                    # so search the whole stream for CDK/CloudFormation/AWS errors instead of only tailing it
+                    print_error "Errors found in build logs:"
+                    aws logs filter-log-events --log-group-name $LOG_GROUP --log-stream-names $LATEST_STREAM \
+                        --filter-pattern '?"failed:" ?"Error:" ?CREATE_FAILED ?UPDATE_FAILED ?AccessDenied ?"not authorized"' \
+                        --query 'events[-40:].message' --output text 2>/dev/null || print_error "Could not search logs"
+                    echo ""
+                    print_error "Last build log lines:"
                     aws logs get-log-events --log-group-name $LOG_GROUP --log-stream-name $LATEST_STREAM --query 'events[-30:].message' --output text 2>/dev/null || print_error "Could not retrieve logs"
                 else
                     print_error "Could not retrieve build logs. Check CodeBuild console for details."
@@ -679,12 +695,21 @@ if [ -z "$REGION" ]; then
     exit 1
 fi
 
-print_success "✅ AWS credentials verified. Account: $ACCOUNT_ID, Region: $REGION"
+# Detect the AWS partition (aws, aws-us-gov, ...) from the caller ARN
+PARTITION=$(aws sts get-caller-identity --query "Arn" --output text | cut -d: -f2)
+if [ "$PARTITION" == "aws-us-gov" ]; then
+    CONSOLE_URL="https://console.amazonaws-us-gov.com"
+else
+    CONSOLE_URL="https://console.aws.amazon.com"
+fi
+
+print_success "✅ AWS credentials verified. Account: $ACCOUNT_ID, Region: $REGION, Partition: $PARTITION"
 echo ""
 
-# GitHub repository URL (hardcoded)
-GITHUB_URL="https://github.com/ASUCICREPO/PDF_Accessibility.git"
-print_success "   Repository: $GITHUB_URL ✅"
+# GitHub repository and branch CodeBuild deploys from (override with GITHUB_URL / SOURCE_VERSION env vars)
+GITHUB_URL="${GITHUB_URL:-https://github.com/ASUCICREPO/PDF_Accessibility.git}"
+SOURCE_VERSION="${SOURCE_VERSION:-main}"
+print_success "   Repository: $GITHUB_URL ($SOURCE_VERSION) ✅"
 echo ""
 
 # CodeBuild project name (hardcoded with timestamp)
@@ -719,7 +744,7 @@ fi
 
 echo ""
 print_status "🔍 Monitor builds in AWS Console:"
-print_status "   https://console.aws.amazon.com/codesuite/codebuild/projects"
+print_status "   ${CONSOLE_URL}/codesuite/codebuild/projects?region=${REGION}"
 echo ""
 
 print_success "🚀 Your PDF accessibility solution is ready to use!"
