@@ -68,6 +68,21 @@ phases:
     commands:
       - echo "Build phase started on $(date)"
       - |
+        # Guard against a half-deleted CDK bootstrap: if the CDKToolkit stack exists but its assets
+        # bucket was removed outside CloudFormation, `cdk bootstrap` reports "no changes" and
+        # `cdk deploy` fails with "No bucket named 'cdk-...-assets-...'" (shown as AggregateError).
+        CDK_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+        CDK_REGION=${AWS_REGION:-$AWS_DEFAULT_REGION}
+        CDK_ASSETS_BUCKET="cdk-hnb659fds-assets-${CDK_ACCOUNT}-${CDK_REGION}"
+        if aws cloudformation describe-stacks --stack-name CDKToolkit >/dev/null 2>&1 \
+           && ! aws s3api head-bucket --bucket "$CDK_ASSETS_BUCKET" >/dev/null 2>&1; then
+          echo "ERROR: The CDKToolkit stack exists but its assets bucket '$CDK_ASSETS_BUCKET' is missing or not accessible."
+          echo "       CDK cannot repair this automatically. Recreate the bootstrap stack, then re-run this build:"
+          echo "         aws cloudformation delete-stack --stack-name CDKToolkit"
+          echo "         aws cloudformation wait stack-delete-complete --stack-name CDKToolkit"
+          exit 1
+        fi
+      - |
         if [ "$DEPLOYMENT_TYPE" = "pdf2html" ]; then
           echo "Deploying PDF-to-HTML Remediation Solution..."
           cd pdf2html

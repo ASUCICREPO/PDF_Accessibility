@@ -369,15 +369,28 @@ deploy_backend_solution() {
                 fi
 
                 if [ -n "$LATEST_STREAM" ] && [ "$LATEST_STREAM" != "None" ]; then
-                    # The failed phase's command block is echoed back at the end of the log,
-                    # so search the whole stream for CDK/CloudFormation/AWS errors instead of only tailing it
-                    print_error "Errors found in build logs:"
-                    aws logs filter-log-events --log-group-name $LOG_GROUP --log-stream-names $LATEST_STREAM \
-                        --filter-pattern '?"failed:" ?"Error:" ?CREATE_FAILED ?UPDATE_FAILED ?AccessDenied ?"not authorized"' \
-                        --query 'events[-40:].message' --output text 2>/dev/null || print_error "Could not search logs"
-                    echo ""
-                    print_error "Last build log lines:"
-                    aws logs get-log-events --log-group-name $LOG_GROUP --log-stream-name $LATEST_STREAM --query 'events[-30:].message' --output text 2>/dev/null || print_error "Could not retrieve logs"
+                    # Save the entire build log locally. The failed phase's command block is echoed
+                    # back at the end of the stream, so the tail alone never shows the real error.
+                    BUILD_LOG_FILE="build-log-${PROJECT_NAME}.txt"
+                    if aws logs tail "$LOG_GROUP" --log-stream-names "$LATEST_STREAM" --since 1d --format short > "$BUILD_LOG_FILE" 2>/dev/null \
+                        && [ -s "$BUILD_LOG_FILE" ]; then
+                        print_error "Full build log saved to: $(pwd)/$BUILD_LOG_FILE"
+                        echo ""
+                        print_error "Errors found in build log (with surrounding lines):"
+                        # Skip the echoed buildspec lines, which contain the word 'error' in their echo strings
+                        grep -n -i -E 'error|fail|denied|not authorized|ECONN|ENOTFOUND|ETIMEDOUT' "$BUILD_LOG_FILE" \
+                            | grep -v -E 'echo "|Phase context status code|if \[|Running command' | head -20 | cut -d: -f1 \
+                            | while read -r LINE; do
+                                START=$(( LINE > 3 ? LINE - 3 : 1 ))
+                                echo "----- line $LINE -----"
+                                sed -n "${START},$((LINE + 15))p" "$BUILD_LOG_FILE"
+                            done
+                        echo ""
+                        print_error "If the cause is not clear above, share $BUILD_LOG_FILE with support."
+                    else
+                        print_error "Could not download the full log. Last build log lines:"
+                        aws logs get-log-events --log-group-name $LOG_GROUP --log-stream-name $LATEST_STREAM --query 'events[-30:].message' --output text 2>/dev/null || print_error "Could not retrieve logs"
+                    fi
                 else
                     print_error "Could not retrieve build logs. Check CodeBuild console for details."
                 fi
