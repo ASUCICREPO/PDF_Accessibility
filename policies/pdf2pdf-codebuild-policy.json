@@ -59,7 +59,7 @@
         {
             "Sid": "CDKBootstrapVersionParameter",
             "Effect": "Allow",
-            "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:PutParameter"],
+            "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:PutParameter", "ssm:DeleteParameter"],
             "Resource": "arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"
         },
         {

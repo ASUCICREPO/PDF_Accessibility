@@ -72,7 +72,7 @@ See [`policies/pdf2pdf-codebuild-policy.json`](../policies/pdf2pdf-codebuild-pol
 | ECRAuth | `ecr:GetAuthorizationToken` | `*` | Docker login to ECR |
 | CDKBootstrapRoles | 14 IAM role actions | `role/cdk-*` | Create/update bootstrap roles |
 | PassCDKExecutionRoleToCloudFormation | `iam:PassRole` | `role/cdk-*-cfn-exec-role-*` (conditioned on `iam:PassedToService`: cloudformation) | Pass the CDK execution role to CloudFormation |
-| CDKBootstrapVersionParameter | `ssm:GetParameter`, `GetParameters`, `PutParameter` | `parameter/cdk-bootstrap/*` | CDK bootstrap version parameter |
+| CDKBootstrapVersionParameter | `ssm:GetParameter`, `GetParameters`, `PutParameter`, `DeleteParameter` | `parameter/cdk-bootstrap/*` | CDK bootstrap version parameter |
 | CodeConnectionsAccess | `codeconnections:GetConnectionToken`, `GetConnection`, `UseConnection` | `connection/*` (any partition) | Only used if the account has a GitHub source credential configured through CodeConnections |
 
 ### PDF-to-HTML Deployment Policy
