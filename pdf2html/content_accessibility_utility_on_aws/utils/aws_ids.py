@@ -12,15 +12,11 @@ from typing import Optional
 
 import boto3
 
-DEFAULT_MODEL_NAME = "amazon.nova-lite-v1:0"
+DEFAULT_MODEL_NAME = "openai.gpt-5.6-luna"
 
 
 def inference_profile_prefix(region: Optional[str]) -> str:
-    """
-    Return the Bedrock cross-region inference profile prefix for a region,
-    e.g. 'us-gov.' for us-gov-west-1, 'us.' for us-east-1, 'eu.' for eu-west-1.
-    Falls back to 'us.' for unrecognized regions.
-    """
+    """Cross-region inference profile prefix for the region (us., us-gov., eu., apac.)."""
     region = region or ""
     if region.startswith("us-gov-"):
         return "us-gov."
@@ -39,10 +35,12 @@ def partition_for_region(region: Optional[str]) -> str:
 
 
 def default_model_id(region: Optional[str]) -> str:
-    """
-    Return the Bedrock model ID to use for remediation.
-
-    The BEDROCK_MODEL_ID environment variable takes precedence; otherwise the
-    region's cross-region inference profile for Nova Lite is used.
-    """
+    """Model ID for remediation: BEDROCK_MODEL_ID, else the region's inference profile for DEFAULT_MODEL_NAME."""
     return os.getenv("BEDROCK_MODEL_ID") or f"{inference_profile_prefix(region)}{DEFAULT_MODEL_NAME}"
+
+
+def model_request_fields(model_id: str) -> dict:
+    """Per-provider Converse request fields."""
+    if "openai." in model_id:
+        return {"additionalModelRequestFields": {"reasoning": {"effort": os.getenv("BEDROCK_REASONING_EFFORT", "low")}}}
+    return {}

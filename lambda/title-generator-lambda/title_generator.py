@@ -42,11 +42,7 @@ def exponential_backoff_retry(
 
 
 def inference_profile_prefix(region):
-    """
-    Returns the Bedrock cross-region inference profile prefix for a region,
-    e.g. 'us-gov.' for us-gov-west-1, 'us.' for us-east-1, 'eu.' for eu-west-1.
-    Falls back to 'us.' for unrecognized regions.
-    """
+    """Cross-region inference profile prefix for the region (us., us-gov., eu., apac.)."""
     if region.startswith('us-gov-'):
         return 'us-gov.'
     if region.startswith('eu-'):
@@ -54,6 +50,14 @@ def inference_profile_prefix(region):
     if region.startswith('ap-'):
         return 'apac.'
     return 'us.'
+
+
+def model_request_fields(model_id):
+    """Per-provider Converse request fields."""
+    if 'openai.' in model_id:
+        effort = os.environ.get('BEDROCK_REASONING_EFFORT', 'low')
+        return {'additionalModelRequestFields': {'reasoning': {'effort': effort}}}
+    return {}
 
 
 def download_file_from_s3(bucket_name, file_key, local_path, filename):
@@ -158,17 +162,18 @@ def extract_text_from_pdf(pdf_document):
 def generate_title(extracted_text, current_title):
     session = boto3.Session()
     region = session.region_name
+    # Region for Bedrock calls (S3 stays in-region)
+    bedrock_region = os.environ.get('BEDROCK_REGION') or region
 
-    # Cross-region inference profile ID; works in commercial and GovCloud partitions
-    model_id = os.environ.get('BEDROCK_MODEL_ID') or f'{inference_profile_prefix(region)}amazon.nova-pro-v1:0'
-    print(f"(generate_title) Model ID: {model_id}")
+    model_id = os.environ.get('BEDROCK_MODEL_ID') or f'{inference_profile_prefix(bedrock_region)}openai.gpt-5.6-luna'
+    print(f"(generate_title) Model ID: {model_id} (region {bedrock_region})")
 
-    client = boto3.client('bedrock-runtime', region_name=region)
+    client = boto3.client('bedrock-runtime', region_name=bedrock_region)
     prompt = f'''
     Using the following content extracted from the first two to three pages of a PDF document, generate a clear, concise, and descriptive title for the file. 
     The title should accurately summarize the primary focus of the document, be free of unnecessary jargon, and comply with WCAG 2.1 AA accessibility guidelines by being understandable and distinguishable.
 
-    Check the current title against the context of the extracted text. If you think the current title is good enough based on the context, reply with the current title and nothing else. Otherwise, generate a new title based on the provided context.
+    The current title below is the document's file name, not a real title. Replace it with a proper title based on the context unless it already reads as a complete, descriptive document title; a bare file name (with hyphens, underscores or a .pdf extension) never does.
 
     Current File Title: {current_title}
     Context for title generation: {extracted_text}
@@ -191,14 +196,18 @@ def generate_title(extracted_text, current_title):
         client.converse,
         modelId=model_id,
         messages=request_payload['messages'],
+        inferenceConfig={'maxTokens': 300},
         retries=3,
         base_delay=1,
-        backoff_factor=2
+        backoff_factor=2,
+        **model_request_fields(model_id)
     )
 
-    # Extract and return the generated title
-    generated_title = response['output']['message']['content'][0]['text']
-    return generated_title.strip('"')
+    # Join all text blocks
+    generated_title = "".join(block.get('text', '') for block in response['output']['message']['content'])
+    if not generated_title.strip():
+        raise ValueError(f"Model returned no text content (stopReason={response.get('stopReason')})")
+    return generated_title.strip().strip('"')
 
 
 def lambda_handler(event, context):

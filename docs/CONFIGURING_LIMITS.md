@@ -280,7 +280,7 @@ audit:
 
 remediate:
   severity_threshold: "minor"
-  model_id: "us.amazon.nova-lite-v1:0"
+  model_id: null  # defaults to the region's inference profile for openai.gpt-5.6-luna
 
 aws:
   region: null

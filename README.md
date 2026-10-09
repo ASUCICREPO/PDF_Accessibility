@@ -60,7 +60,8 @@ We provide a **unified deployment script** that allows you to deploy either or b
 
 1. **AWS Account** with appropriate permissions to create and manage AWS resources
    - See [IAM Permissions Guide](docs/IAM_PERMISSIONS.md) for detailed permission requirements
-2. **AWS CloudShell access** (AWS CLI is pre-installed and configured automatically)
+2. **Amazon Bedrock model access** - enable the OpenAI `openai.gpt-5.6-luna` model in the Bedrock model catalog for your deployment region (both solutions use it)
+3. **AWS CloudShell access** (AWS CLI is pre-installed and configured automatically)
    - Sign in to the AWS Management Console
    - In the top navigation bar, click the CloudShell icon (terminal symbol) next to the search bar
    - Wait for CloudShell to initialize (this may take a few moments on first use)
@@ -243,7 +244,7 @@ This solution converts PDF documents to accessible HTML format while preserving 
 
 - Verify Adobe API credentials are correct and active
 - Check CloudWatch logs for Lambda functions and ECS tasks
-- Ensure NOVA_PRO Bedrock model access is granted
+- Ensure access to the `openai.gpt-5.6-luna` model is enabled in the Amazon Bedrock model catalog for the deployment region
 
 **PDF-to-HTML Issues**
 

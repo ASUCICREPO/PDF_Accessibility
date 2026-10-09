@@ -231,7 +231,7 @@ def _add_remediate_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--model-id",
         default=None,
-        help="Bedrock model ID to use for remediation (default: region's Nova Lite inference profile)",
+        help="Bedrock model ID to use for remediation (default: region inference profile for the solution model)",
     )
     parser.add_argument(
         "--severity-threshold",
@@ -345,7 +345,7 @@ def _add_process_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--model-id",
         default=None,
-        help="Bedrock model ID to use for remediation (default: region's Nova Lite inference profile)",
+        help="Bedrock model ID to use for remediation (default: region inference profile for the solution model)",
     )
 
     # Shared options

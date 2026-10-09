@@ -105,9 +105,9 @@ Before deploying:
 2. **Bedrock model access** — confirm the models used by the solution are available and enabled:
    ```bash
    aws bedrock list-inference-profiles --region us-gov-west-1 \
-     --query 'inferenceProfileSummaries[?contains(inferenceProfileId, `nova`)].inferenceProfileId'
+     --query 'inferenceProfileSummaries[?contains(inferenceProfileId, `gpt-5.6-luna`)].inferenceProfileId'
    ```
-   The solutions default to `us-gov.amazon.nova-pro-v1:0` and `us-gov.amazon.nova-lite-v1:0` in GovCloud. To use different IDs, set these environment variables:
+   The solutions default to `us-gov.openai.gpt-5.6-luna` in GovCloud. To use different IDs, set these environment variables:
    - `BEDROCK_MODEL_ID` on the title generator Lambda (pdf2pdf) and on the `Pdf2HtmlPipeline` Lambda (pdf2html).
    - `BEDROCK_MODEL_ID_ALT_TEXT` and `BEDROCK_MODEL_ID_LINK_ALT_TEXT` on the alt-text ECS task (pdf2pdf).
 3. **BDA profile (PDF-to-HTML)** — the default is `arn:aws-us-gov:bedrock:<region>:<account>:data-automation-profile/us-gov.data-automation-v1`. To override it, set `BDA_PROFILE_ARN` on the `Pdf2HtmlPipeline` Lambda.
@@ -214,8 +214,8 @@ These permissions are created by the CDK stack (`pdf2html/cdk/lib/pdf2html-stack
       "Effect": "Allow",
       "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
       "Resource": [
-        "arn:${Partition}:bedrock:*::foundation-model/amazon.nova-*",
-        "arn:${Partition}:bedrock:*:${AccountId}:inference-profile/*amazon.nova-*"
+        "arn:${Partition}:bedrock:*::foundation-model/openai.gpt-5.6-luna",
+        "arn:${Partition}:bedrock:*:${AccountId}:inference-profile/*openai.gpt-5.6-luna"
       ]
     },
     {

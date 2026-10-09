@@ -15,7 +15,7 @@ from typing import Optional
 from content_accessibility_utility_on_aws.utils.logging_helper import setup_logger
 from content_accessibility_utility_on_aws.utils.usage_tracker import SessionUsageTracker
 from content_accessibility_utility_on_aws.utils.image_utils import resize_image
-from content_accessibility_utility_on_aws.utils.aws_ids import default_model_id
+from content_accessibility_utility_on_aws.utils.aws_ids import default_model_id, model_request_fields
 
 # Set up module-level logger
 logger = setup_logger(__name__)
@@ -47,7 +47,7 @@ class BedrockClient:
         Initialize the Bedrock client.
 
         Args:
-            model_id: The ID of the Bedrock model to use (default: region-aware Nova Lite)
+            model_id: The ID of the Bedrock model to use
             profile: AWS profile name to use for authentication
         """
         self.profile = profile
@@ -116,6 +116,7 @@ class BedrockClient:
                 inferenceConfig={
                     "maxTokens": max_tokens,
                 },
+                **model_request_fields(self.model_id),
             )
 
             # Extract the generated text
@@ -126,7 +127,7 @@ class BedrockClient:
                 and "content" in response["output"]["message"]
                 and len(response["output"]["message"]["content"]) > 0
             ):
-                generated_text = response["output"]["message"]["content"][0]["text"]
+                generated_text = "".join(block.get("text", "") for block in response["output"]["message"]["content"])
 
                 # Track token usage
                 end_time = datetime.now()
@@ -261,6 +262,7 @@ class BedrockClient:
                 inferenceConfig={
                     "maxTokens": max_tokens,
                 },
+                **model_request_fields(self.model_id),
             )
 
             # Extract the generated text
@@ -270,7 +272,7 @@ class BedrockClient:
                 and "content" in response["output"]["message"]
                 and len(response["output"]["message"]["content"]) > 0
             ):
-                generated_text = response["output"]["message"]["content"][0]["text"]
+                generated_text = "".join(block.get("text", "") for block in response["output"]["message"]["content"])
 
                 # Track token usage
                 end_time = datetime.now()

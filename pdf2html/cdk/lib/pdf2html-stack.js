@@ -53,17 +53,15 @@ class Pdf2HtmlStack extends Stack {
       resources: [`arn:${this.partition}:s3:::${bucketName.valueAsString}`, `arn:${this.partition}:s3:::${bucketName.valueAsString}/*`],
     }));
 
-    // Add permissions for Bedrock - scoped to specific actions needed
-    // Cross-region inference profiles (us.*, us-gov.*, eu.*, ...) are authorized against the
-    // profile ARN and the underlying foundation model in every destination region.
+    // Bedrock model invocation (inference profile + foundation model in every destination region)
     lambdaRole.addToPolicy(new iam.PolicyStatement({
       actions: [
         'bedrock:InvokeModel',
         'bedrock:InvokeModelWithResponseStream',
       ],
       resources: [
-        `arn:${this.partition}:bedrock:*::foundation-model/amazon.nova-*`,
-        `arn:${this.partition}:bedrock:*:${this.account}:inference-profile/*amazon.nova-*`,
+        `arn:${this.partition}:bedrock:*::foundation-model/openai.gpt-5.6-luna`,
+        `arn:${this.partition}:bedrock:*:${this.account}:inference-profile/*openai.gpt-5.6-luna`,
       ],
     }));
     

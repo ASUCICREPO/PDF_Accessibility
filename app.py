@@ -17,6 +17,7 @@ from aws_cdk import (
     aws_cloudwatch as cloudwatch,
 )
 from constructs import Construct
+import os
 import platform
 import datetime
 
@@ -31,6 +32,13 @@ class PDFAccessibility(Stack):
                           versioned=True,
                           removal_policy=cdk.RemovalPolicy.RETAIN)
         
+        # Optional model overrides read from the synth environment
+        model_env = {k: os.environ[k] for k in (
+            "BEDROCK_MODEL_ID_ALT_TEXT", "BEDROCK_MODEL_ID_LINK_ALT_TEXT", "BEDROCK_MODEL_ID",
+            "BEDROCK_REGION", "BEDROCK_REASONING_EFFORT") if os.environ.get(k)}
+        alt_text_env = {k: v for k, v in model_env.items() if k != "BEDROCK_MODEL_ID"}
+        title_env = {k: v for k, v in model_env.items() if k not in ("BEDROCK_MODEL_ID_ALT_TEXT", "BEDROCK_MODEL_ID_LINK_ALT_TEXT")}
+
         # Get account and region for use throughout the stack
         account_id = Stack.of(self).account
         region = Stack.of(self).region
@@ -165,6 +173,7 @@ class PDFAccessibility(Stack):
         alt_text_container_def = alt_text_task_def.add_container("alt-text-llm-container",
                                                                   image=ecs.ContainerImage.from_registry(alt_text_generator_image_asset.image_uri),
                                                                   memory_limit_mib=1024,
+                                                                  environment=alt_text_env,
                                                                    logging=ecs.LogDrivers.aws_logs(
         stream_prefix="AltTextGeneratorLogs",
         log_group=alt_text_generator_log_group
@@ -278,6 +287,7 @@ class PDFAccessibility(Stack):
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler='title_generator.lambda_handler',
             code=lambda_.Code.from_docker_build('lambda/title-generator-lambda'),
+            environment=title_env,
             timeout=Duration.seconds(900),
             memory_size=1024,
             # architecture=lambda_.Architecture.ARM_64

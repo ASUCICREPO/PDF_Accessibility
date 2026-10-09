@@ -1,6 +1,6 @@
 /**
  * This script is designed to automate the process of downloading a PDF document from an S3 bucket, 
- * extracting associated image files, generating WCAG 2.1-compliant alt text using AWS Bedrock model(Claude Sonnet 3.5), 
+ * extracting associated image files, generating WCAG 2.1-compliant alt text using an Amazon Bedrock model, 
  * and updating the PDF document with the generated alt text. 
  * Finally, the modified PDF is re-uploaded to the S3 bucket.
  * 
@@ -29,7 +29,7 @@
  */
 
 const { S3Client, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
-const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
+const { BedrockRuntimeClient, ConverseCommand } = require('@aws-sdk/client-bedrock-runtime');
 const fs = require('fs').promises;
 const fs_1 = require('fs');
 const winston = require('winston');
@@ -37,18 +37,14 @@ const pdfLib = require('pdf-lib');
 const stream = require('stream');
 const { promisify } = require('util');
 const path = require('path');
-const { PDFDocument, PDFName, PDFDict, PDFString } = require('pdf-lib');
+const { PDFDocument, PDFName, PDFDict, PDFHexString } = require('pdf-lib');
 const Database = require('better-sqlite3');
 
 const pipeline = promisify(stream.pipeline);
 
 const AWS_REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || process.env.CDK_DEFAULT_REGION;
 
-/**
- * Returns the Bedrock cross-region inference profile prefix for a region,
- * e.g. 'us-gov.' for us-gov-west-1, 'us.' for us-east-1, 'eu.' for eu-west-1.
- * Falls back to 'us.' for unrecognized regions.
- */
+// Cross-region inference profile prefix for the region (us., us-gov., eu., apac.)
 function inferenceProfilePrefix(region = "") {
     if (region.startsWith("us-gov-")) return "us-gov.";
     if (region.startsWith("eu-")) return "eu.";
@@ -56,15 +52,21 @@ function inferenceProfilePrefix(region = "") {
     return "us.";
 }
 
-// ============================================================================
-// MODEL CONFIGURATION - Override with the env vars below to change the AI models used
-// ============================================================================
-// Model ID for generating alt text for images (requires vision capability)
-const MODEL_ID_ALT_TEXT = process.env.BEDROCK_MODEL_ID_ALT_TEXT || `${inferenceProfilePrefix(AWS_REGION)}amazon.nova-pro-v1:0`;
+// Model IDs (inference profiles); override with the env vars
+const MODEL_ID_ALT_TEXT = process.env.BEDROCK_MODEL_ID_ALT_TEXT || `${inferenceProfilePrefix(AWS_REGION)}openai.gpt-5.6-luna`;
+const MODEL_ID_LINK_ALT_TEXT = process.env.BEDROCK_MODEL_ID_LINK_ALT_TEXT || `${inferenceProfilePrefix(AWS_REGION)}openai.gpt-5.6-luna`;
+// Region for Bedrock calls (S3 stays in AWS_REGION)
+const BEDROCK_REGION = process.env.BEDROCK_REGION || AWS_REGION;
+const BEDROCK_REASONING_EFFORT = process.env.BEDROCK_REASONING_EFFORT || "low";
 
-// Model ID for generating alt text for hyperlinks (text-only, can use lighter model)
-const MODEL_ID_LINK_ALT_TEXT = process.env.BEDROCK_MODEL_ID_LINK_ALT_TEXT || `${inferenceProfilePrefix(AWS_REGION)}amazon.nova-lite-v1:0`;
-// ============================================================================
+// Per-provider Converse request options
+function modelRequestOptions(modelId) {
+    const inferenceConfig = { maxTokens: 1000 };
+    const additionalModelRequestFields = modelId.includes("openai.")
+        ? { reasoning: { effort: BEDROCK_REASONING_EFFORT } }
+        : undefined;
+    return { inferenceConfig, additionalModelRequestFields };
+}
 
 // Configure logger
 const logger = winston.createLogger({
@@ -77,6 +79,7 @@ const logger = winston.createLogger({
 
 // Create an S3 client instance.
 const s3Client = new S3Client({ region: AWS_REGION });
+const bedrockClient = new BedrockRuntimeClient({ region: BEDROCK_REGION });
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -93,65 +96,67 @@ function sleep(ms) {
  * @returns {Promise<Object>} - A promise that resolves with the model's response, including the generated alt text.
  * @throws {Error} - Throws an error if invoking the model fails.
  */
+// JSON Schema output config: one required string property named after the PDF object id
+function altTextOutputConfig(objectId, existingFields) {
+    const schema = {
+        type: "object",
+        properties: { [objectId]: { type: "string", description: "WCAG 2.1 compliant alt text for the image" } },
+        required: [objectId],
+        additionalProperties: false,
+    };
+    return {
+        outputConfig: { textFormat: { type: "json_schema", structure: { jsonSchema: { name: "alt_text", schema: JSON.stringify(schema) } } } },
+        additionalModelRequestFields: { ...(existingFields || {}), text: { format: { strict: true } } },
+    };
+}
+
 const invokeModel = async (
     prompt = "generate alt text for this image",
     imageBuffer = null,
+    objectId = null,
 ) => {
-    // Create a new Bedrock Runtime client instance.
-    const client = new BedrockRuntimeClient({ region: AWS_REGION });
-    
-    // Convert the image buffer to a base64-encoded string
-    const inputImageBase64 = imageBuffer ? imageBuffer.toString('base64') : null;
-
-    // Prepare the payload for the model.
-    const payload = {
-        system: [
-          {
-            text: "You are an intelligent assistant capable of analyzing images and answering questions about them."
-          }
-        ],
-        messages: [
-          {
-            role: "user", // First turn should always be from the user
-            content: [
-              {
-                text: prompt // Add your prompt about the image here
-              },
-              {
-                image: {
-                  format: "png", // Specify the format of the image (e.g., jpeg, png)
-                  source: {
-                    bytes: inputImageBase64 // Include the Base64-encoded image data
-                  }
-                }
-              }
-            ]
-          }
-        ],
-        inferenceConfig: {
-          max_new_tokens: 1000, // Adjust as needed (default is dynamic)
-          temperature: 0.7, // Default temperature for randomness
-          top_p: 0.9, // Default top-p sampling value
-          top_k: 50, // Default top-k sampling value
-          stopSequences: [] // Optional stop sequences if needed
-        },
-      };
-
-    // Invoke the model with the payload and wait for the response.
-    const command = new InvokeModelCommand({
+    const { inferenceConfig, additionalModelRequestFields } = modelRequestOptions(MODEL_ID_ALT_TEXT);
+    // Structured output where the model supports it
+    const structured = objectId !== null && MODEL_ID_ALT_TEXT.includes("openai.")
+        ? altTextOutputConfig(String(objectId), additionalModelRequestFields)
+        : {};
+    const command = new ConverseCommand({
+        ...structured,
         modelId: MODEL_ID_ALT_TEXT,
-        contentType: "application/json",
-        accept: "application/json",
-        body: JSON.stringify(payload)
-      });
-    const apiResponse = await client.send(command);
-
-    // Decode and return the response(s)
-    const decodedResponseBody = new TextDecoder("utf-8").decode(apiResponse.body);
-    const responseBody = JSON.parse(decodedResponseBody);
-    logger.info(`response of alt text: ${responseBody.output.message}`);
-    return responseBody.output.message;
+        system: [{ text: "You are an intelligent assistant capable of analyzing images and answering questions about them." }],
+        messages: [{
+            role: "user",
+            content: [
+                { text: prompt },
+                { image: { format: "png", source: { bytes: imageBuffer } } },
+            ],
+        }],
+        inferenceConfig,
+        ...(!structured.additionalModelRequestFields && additionalModelRequestFields && { additionalModelRequestFields }),
+    });
+    const response = await bedrockClient.send(command);
+    logger.info(`alt text usage: ${JSON.stringify(response.usage)} stop: ${response.stopReason}`);
+    return response.output.message;
 };
+
+// Parses the alt text response into {<objectId>: altText}; strips code fences and remaps a single mis-keyed entry
+function parseAltTextResponse(response, expectedId, filebasename) {
+    const cleaned = String(response).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    const parsed = JSON.parse(cleaned);
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error(`Alt text response is not a JSON object: ${cleaned.slice(0, 200)}`);
+    }
+    const key = String(expectedId);
+    if (typeof parsed[key] === 'string') {
+        return { [key]: parsed[key] };
+    }
+    const entries = Object.entries(parsed).filter(([, v]) => typeof v === 'string');
+    if (entries.length === 1) {
+        logger.warn(`Filename: ${filebasename} | Alt text keyed by "${entries[0][0]}" instead of object id ${key}; remapping`);
+        return { [key]: entries[0][1] };
+    }
+    throw new Error(`Alt text response has no usable entry for object id ${key}: ${cleaned.slice(0, 200)}`);
+}
 
 /**
  * Generates WCAG 2.1-compliant alt text for an image based on its content and the provided prompt.
@@ -194,6 +199,7 @@ async function generateAltText(imageObject, imageBuffer) {
    - **Power Notation Accuracy:** Ensure that any exponentiation is represented accurately. Always check that the power formatting is preserved correctly by using the phrase "to the power of" immediately after the base value, followed by the exponent. Do not drop, alter, or misplace any exponent values.
    - **Subscript** Ensure that you properly describe subscript and superscript. For an example for euqation Fᵢ = mᵢ a², you should give the alt text as "F with subscript i end subscript equals m with subscript i end subscript a to the power of 2". Another example: Fₐ/ₓ = mₐ/ₓ a², you should give the alt text as "F with subscript a divided by x end subscript equals m with subscript a divided by x end subscript a to the power of 2 (Note: you will have a picture of the equation and not it might not the represented in the exact way as given in the examples here)"
    - *Superscript*: Ensure that you properly describe the superscript. For example, Fₐ/ₓ^(n+1) = mᵢⱼ^k + a^b, you should give the alt text as "F with subscript a divided by x end subscript with superscript n plus 1 end superscript equals m with subscript i j end subscript with superscript k end superscript plus a with superscript b end superscript (Note: you will have a picture of the equation and not it might not the represented in the exact way as given in the examples here)."
+   - **Scope of subscripts and superscripts:** Decide first whether each symbol is inside a subscript or superscript before describing it, and always mark where it ends with "end subscript" or "end superscript".
    - **Variable Names:** Always use the exact variable names and symbols as provided in the original equation. Do not substitute or alter them (for example, if the equation includes the lambda symbol, retain it exactly as given).
     4. Output Guidelines:
        - Keep alt text short, clear, and relevant
@@ -214,6 +220,7 @@ async function generateAltText(imageObject, imageBuffer) {
     - <STEP3> If there are multiple images on the same page, determine which text is relevant for our image of interest and which is not </STEP3>
     - <STEP4> Always use the name of a person if available and ensure you DO NOT assign the wrong name to an image</STEP4>
     - <STEP5> Decide carefully which text to use, considering the image's before and after context [STRICT STEP]</STEP5>
+    - <STEP6> When several images share a page with little text between them, use only the text that belongs to our image of interest; text next to another image belongs to that image </STEP6>
 
     <IMPORTANT THING>
     In cases where there is text on both sides of our image of interest, analyze the overall page content and decide which portion to use. One method may be:
@@ -221,11 +228,6 @@ async function generateAltText(imageObject, imageBuffer) {
     - <STEP 2> Assume that text associated with other images is not related to our image of interest </STEP 2>
     </IMPORTANT THING>
 
-    <FEEDBACK>
-    You tend to make mistakes when multiple images are present with small amounts of text in between. In such cases, choose the correct text for the alt text.
-    *ALERT* Be careful when you are describing the subscript and superscripts in the alt text. Make sure you are describing them correctly. for subscripts you are making so many mistakes. you must firts decide if this is the part of subscript or not and then go ahead.
-    *ALERT* Always mention end of superscript and subscript, you are not describing end of subscript and superscript properly.
-    </FEEDBACK>
     <ACTUAL CONTENT>
     ${imageObject.context_json.context}
     <ACTUAL CONTENT>
@@ -234,9 +236,12 @@ async function generateAltText(imageObject, imageBuffer) {
     `;
 
     try {
-        const response = await invokeModel(prompt, imageBuffer);
-        
-        return response.content[0].text;
+        const response = await invokeModel(prompt, imageBuffer, imageObject.id);
+        const text = response.content.map((c) => c.text || "").join("");
+        if (!text.trim()) {
+            throw new Error("Model returned no text content");
+        }
+        return text;
     } catch (error) {
       
         throw error;
@@ -256,47 +261,20 @@ const invokeModel_alt_text_links = async (
     prompt = "Generate alt text for this link"
 ) => {
     logger.info(`generating link alt text`);
-    const client = new BedrockRuntimeClient({ region: AWS_REGION });
-    
-    const payload = {
-        system: [
-          {
-            text: "You are an intelligent assistant capable of analyzing links and answering questions about them."
-          }
-        ],
-        messages: [
-          {
-            role: "user", // First turn should always be from the user
-            content: [
-              {
-                text: prompt 
-              },
-            ]
-          }
-        ],
-        inferenceConfig: {
-          max_new_tokens: 1000, // Adjust as needed (default is dynamic)
-          temperature: 0.7, // Default temperature for randomness
-          top_p: 0.9, // Default top-p sampling value
-          top_k: 50, // Default top-k sampling value
-          stopSequences: [] // Optional stop sequences if needed
-        },
-      };
-
-    // Invoke the model with the payload and wait for the response.
-    const command = new InvokeModelCommand({
+    const { inferenceConfig, additionalModelRequestFields } = modelRequestOptions(MODEL_ID_LINK_ALT_TEXT);
+    const command = new ConverseCommand({
         modelId: MODEL_ID_LINK_ALT_TEXT,
-        contentType: "application/json",
-        accept: "application/json",
-        body: JSON.stringify(payload)
-      });
+        system: [{ text: "You are an intelligent assistant capable of analyzing links and answering questions about them." }],
+        messages: [{ role: "user", content: [{ text: prompt }] }],
+        inferenceConfig,
+        ...(additionalModelRequestFields && { additionalModelRequestFields }),
+    });
 
     try {
-        const apiResponse = await client.send(command);
-        const decodedResponseBody = new TextDecoder().decode(apiResponse.body);
-        const responseBody = JSON.parse(decodedResponseBody);
-        logger.info(`response of alt text: ${responseBody.output.message.content[0].text}`);
-        return responseBody.output.message.content[0].text;
+        const response = await bedrockClient.send(command);
+        const text = response.output.message.content.map((c) => c.text || "").join("");
+        logger.info(`response of alt text: ${text}`);
+        return text;
     } catch (error) {
         console.error(`Error invoking model: ${error}`);
         throw error;
@@ -376,8 +354,8 @@ async function modifyPDF(zipped, bucketName, inputKey, outputKey, filebasename) 
                                 logger.info(`Filename: ${filebasename} | Adding the alt text`);
                         
                                 const newAltText = value;
-                                pdfObject.set(PDFName.of('Alt'), PDFString.of(newAltText));
-                                pdfObject.set(PDFName.of('Contents'), PDFString.of(newAltText));
+                                pdfObject.set(PDFName.of('Alt'), PDFHexString.fromText(newAltText));
+                                pdfObject.set(PDFName.of('Contents'), PDFHexString.fromText(newAltText));
                                 delete zipped[key];
                                 logger.info(`Filename: ${filebasename} | Alt text added:${newAltText}`);
                                 logger.info(`Filename: ${filebasename} | Alt text  for object number:${pdfRef.objectNumber} and key ${key}`);
@@ -394,8 +372,8 @@ async function modifyPDF(zipped, bucketName, inputKey, outputKey, filebasename) 
                         if (url) {
                             console.log(`Processing URL: ${url}`);
                             const altTextPromise = generateAltTextForLink(url).then((altText) => {
-                                pdfObject.set(PDFName.of('Alt'), PDFString.of(altText));
-                                pdfObject.set(PDFName.of('Contents'), PDFString.of(altText));
+                                pdfObject.set(PDFName.of('Alt'), PDFHexString.fromText(altText));
+                                pdfObject.set(PDFName.of('Contents'), PDFHexString.fromText(altText));
                             });
                             linkProcessingPromises.push(altTextPromise);
                         }
@@ -530,7 +508,7 @@ async function startProcess() {
                 const image_Buffer = await fs.readFile(localFilePath);
                 const response = await generateAltText(imageObject, image_Buffer);
                 logger.info(`Filename: ${filebasename} | Response:${response}`);
-                Object.assign(combinedResults, JSON.parse(response));
+                Object.assign(combinedResults, parseAltTextResponse(response, imageObject.id, filebasename));
                 successCount++;
                 logger.info(`Filename: ${filebasename} | Alt text generation succeeded for image ${imageObject.id} (${successCount} succeeded, ${failureCount} failed)`);
             } catch (error) {
