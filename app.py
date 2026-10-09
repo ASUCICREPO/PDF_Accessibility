@@ -29,7 +29,6 @@ class PDFAccessibility(Stack):
         pdf_processing_bucket = s3.Bucket(self, "pdfaccessibilitybucket1", 
                           encryption=s3.BucketEncryption.S3_MANAGED, 
                           enforce_ssl=True,
-                          versioned=True,
                           removal_policy=cdk.RemovalPolicy.RETAIN)
         
         # Optional model overrides read from the synth environment

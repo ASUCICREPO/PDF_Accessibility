@@ -95,8 +95,6 @@ phases:
             else
               aws s3api create-bucket --bucket $BUCKET_NAME --region $REGION --create-bucket-configuration LocationConstraint=$REGION
             fi
-            aws s3api put-bucket-versioning --bucket $BUCKET_NAME --versioning-configuration Status=Enabled
-            
             aws s3api put-object --bucket $BUCKET_NAME --key uploads/
             aws s3api put-object --bucket $BUCKET_NAME --key output/
             aws s3api put-object --bucket $BUCKET_NAME --key remediated/
