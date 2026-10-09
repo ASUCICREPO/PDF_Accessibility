@@ -6,6 +6,7 @@
 ### Key Features:
 - **Automated Deployment**: Streamlined deployment process with automated scripts
 - **PDF2HTML Functionality**: New capability to convert PDFs to accessible HTML format
+- **Model**: Alt text, link text and title generation use OpenAI GPT-5.6 Luna on Amazon Bedrock (`openai.gpt-5.6-luna` via inference profiles)
 
 ---
 

@@ -34,6 +34,7 @@ See [`policies/deploy-policy.json`](../policies/deploy-policy.json) for the full
 | STSAccess | `sts:GetCallerIdentity` | `*` | Verify AWS credentials and detect the partition |
 | SecretsManagerAccess | `secretsmanager:CreateSecret`, `UpdateSecret` | `secret:/myapp/*` | Store Adobe API credentials (pdf2pdf only) |
 | BedrockDataAutomationAccess | `bedrock:CreateDataAutomationProject` | `*` | Create BDA project (pdf2html only) |
+| BedrockModelAccessCheck | `bedrock:InvokeModel` | `inference-profile/*openai.gpt-5.6-luna`, `foundation-model/openai.gpt-5.6-luna` | Pre-deployment check that the model is enabled in the region |
 | IAMRoleManagement | `iam:GetRole`, `CreateRole` | `role/pdfremediation-*-codebuild-service-role`, `role/pdf-ui-*-service-role` | Create CodeBuild service roles (backend + UI) |
 | IAMPolicyManagement | `iam:CreatePolicy`, `GetPolicy` | `policy/pdfremediation-*` | Create the backend CodeBuild policy from `policies/` |
 | IAMAttachOwnPolicyToCodeBuildRole | `iam:AttachRolePolicy` | `role/pdfremediation-*-codebuild-service-role` (conditioned on `iam:PolicyARN`: `policy/pdfremediation-*`) | Attach only that policy to the backend CodeBuild role |

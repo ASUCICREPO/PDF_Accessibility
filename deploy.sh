@@ -719,6 +719,26 @@ fi
 print_success "✅ AWS credentials verified. Account: $ACCOUNT_ID, Region: $REGION, Partition: $PARTITION"
 echo ""
 
+# Verify the Bedrock model used by both solutions is enabled in this region
+case "$REGION" in
+    us-gov-*) PROFILE_PREFIX="us-gov." ;;
+    eu-*)     PROFILE_PREFIX="eu." ;;
+    ap-*)     PROFILE_PREFIX="apac." ;;
+    *)        PROFILE_PREFIX="us." ;;
+esac
+BEDROCK_MODEL_ID="${BEDROCK_MODEL_ID:-${PROFILE_PREFIX}openai.gpt-5.6-luna}"
+print_status "🔍 Verifying Bedrock access to $BEDROCK_MODEL_ID..."
+if BEDROCK_CHECK=$(aws bedrock-runtime converse --region "$REGION" --model-id "$BEDROCK_MODEL_ID" \
+        --messages '[{"role":"user","content":[{"text":"Reply with OK"}]}]' --inference-config '{"maxTokens":20}' 2>&1 >/dev/null); then
+    print_success "✅ Bedrock model access verified"
+else
+    print_error "Cannot invoke $BEDROCK_MODEL_ID in $REGION:"
+    print_error "   ${BEDROCK_CHECK:0:300}"
+    print_error "Enable the model in the Amazon Bedrock console (Model catalog → OpenAI → GPT-5.6 Luna → Request access) for this region, then re-run."
+    exit 1
+fi
+echo ""
+
 # GitHub repository and branch CodeBuild deploys from (override with GITHUB_URL / SOURCE_VERSION env vars)
 GITHUB_URL="${GITHUB_URL:-https://github.com/ASUCICREPO/PDF_Accessibility.git}"
 SOURCE_VERSION="${SOURCE_VERSION:-main}"

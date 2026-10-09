@@ -95,6 +95,7 @@ chmod +x deploy.sh
 The script will guide you through:
 
 1. **Solution Selection**: Choose between PDF-to-PDF or PDF-to-HTML remediation
+   - The script verifies that the `openai.gpt-5.6-luna` Bedrock model is enabled in your region before deploying
 2. **Solution-Specific Setup**:
    - **PDF-to-PDF**: Enter Adobe API credentials (stored securely in AWS Secrets Manager)
    - **PDF-to-HTML**: Automatic creation of Bedrock Data Automation project

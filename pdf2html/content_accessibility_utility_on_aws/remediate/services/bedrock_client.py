@@ -78,7 +78,7 @@ class BedrockClient:
             raise
 
     def generate_text(
-        self, prompt: str, purpose: str = "general", max_tokens: int = 500
+        self, prompt: str, purpose: str = "general", max_tokens: int = 1000
     ) -> str:
         """
         Generate text using the Bedrock model.
@@ -162,7 +162,7 @@ class BedrockClient:
             )
 
     def generate_alt_text_for_image(
-        self, image_path: str, prompt: str, max_tokens: int = 500
+        self, image_path: str, prompt: str, max_tokens: int = 1000
     ) -> str:
         """
         Generate alt text for an image using multimodal capabilities.
