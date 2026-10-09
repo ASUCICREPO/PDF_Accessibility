@@ -27,6 +27,8 @@ print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 print_header() { echo -e "${CYAN}$1${NC}"; }
+# Discard keystrokes typed while the script was busy so they are not read as menu input
+flush_stdin() { while read -r -t 0.1 _; do :; done; }
 
 # Global deployment tracking variables
 DEPLOYED_SOLUTIONS=()
@@ -593,6 +595,7 @@ show_next_step_options() {
     echo ""
     
     while true; do
+        flush_stdin
         read -p "Enter your choice (1, 2, or 3): " NEXT_CHOICE
         
         case $NEXT_CHOICE in
@@ -610,6 +613,7 @@ show_next_step_options() {
                 print_status "🎉 Both backend solutions deployed successfully!"
                 echo ""
                 while true; do
+                    flush_stdin
                     read -p "Would you like to deploy the Frontend UI? (y/n): " DEPLOY_UI_CHOICE
                     case $DEPLOY_UI_CHOICE in
                         [Yy]*)
