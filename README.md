@@ -100,7 +100,7 @@ The script will guide you through:
    - **PDF-to-PDF**: Enter Adobe API credentials (stored securely in AWS Secrets Manager)
    - **PDF-to-HTML**: Automatic creation of Bedrock Data Automation project
 3. **Automated Deployment**: Real-time monitoring of the deployment progress
-4. **Optional UI Deployment**: After successful deployment of your chosen solution(s), you'll have the option to deploy a user interface as well
+4. **Optional UI Deployment**: After successful deployment of your chosen solution(s), you'll have the option to deploy a user interface as well (commercial AWS regions only; not available in AWS GovCloud)
 
 **Step 4: Test Your Deployment**
 

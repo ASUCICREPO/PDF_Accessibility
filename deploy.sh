@@ -474,6 +474,12 @@ deploy_backend_solution() {
 deploy_ui() {
     print_header "🎨 Deploying Frontend UI..."
     echo ""
+
+    # Amplify Hosting is not offered in AWS GovCloud
+    if [ "$PARTITION" == "aws-us-gov" ]; then
+        print_warning "⚠️ The Frontend UI is not available in AWS GovCloud. Upload PDFs directly to the S3 buckets instead."
+        return 0
+    fi
     
     # Validate that we have at least one deployed solution
     if [ ${#DEPLOYED_SOLUTIONS[@]} -eq 0 ]; then
@@ -590,7 +596,11 @@ show_next_step_options() {
     fi
     
     echo "1) Deploy $OTHER_SOLUTION_NAME (complete both backend solutions)"
-    echo "2) Deploy Frontend UI (for current solution)"
+    if [ "$PARTITION" == "aws-us-gov" ]; then
+        echo "2) Deploy Frontend UI (not available in AWS GovCloud)"
+    else
+        echo "2) Deploy Frontend UI (for current solution)"
+    fi
     echo "3) Finish (backend only)"
     echo ""
     

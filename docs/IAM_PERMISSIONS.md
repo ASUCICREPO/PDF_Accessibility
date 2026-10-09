@@ -112,6 +112,7 @@ Before deploying:
    - `BEDROCK_MODEL_ID` on the title generator Lambda (pdf2pdf) and on the `Pdf2HtmlPipeline` Lambda (pdf2html).
    - `BEDROCK_MODEL_ID_ALT_TEXT` and `BEDROCK_MODEL_ID_LINK_ALT_TEXT` on the alt-text ECS task (pdf2pdf).
 3. **BDA profile (PDF-to-HTML)** — the default is `arn:aws-us-gov:bedrock:<region>:<account>:data-automation-profile/us-gov.data-automation-v1`. To override it, set `BDA_PROFILE_ARN` on the `Pdf2HtmlPipeline` Lambda.
+4. **Frontend UI** — not available in GovCloud. AWS Amplify Hosting is not offered there, so `deploy.sh` skips the UI option. Upload PDFs directly to the S3 buckets instead.
 
 ---
 
