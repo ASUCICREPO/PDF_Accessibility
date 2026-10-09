@@ -325,9 +325,9 @@ deploy_backend_solution() {
     # Monitor build progress
     print_status "📊 Monitoring deployment progress..."
     if [ "$DEPLOYMENT_TYPE" == "pdf2pdf" ]; then
-        print_status "$solution_name deployment typically takes 3-5 minutes... ⏰"
+        print_status "$solution_name deployment typically takes 10-15 minutes... ⏰"
     else
-        print_status "$solution_name deployment typically takes 5-10 minutes... ⏰"
+        print_status "$solution_name deployment typically takes 3-5 minutes... ⏰"
     fi
     echo ""
 
