@@ -37,7 +37,6 @@ class Pdf2HtmlStack extends Stack {
     });
 
     // Add permissions for S3
-    // Add permissions for S3
     lambdaRole.addToPolicy(new iam.PolicyStatement({
       actions: [
         's3:GetObject',
@@ -51,20 +50,18 @@ class Pdf2HtmlStack extends Stack {
         's3:GetObjectVersion',
         's3:GetBucketPolicy'
       ],
-      resources: [`arn:aws:s3:::${bucketName.valueAsString}`, `arn:aws:s3:::${bucketName.valueAsString}/*`],
+      resources: [`arn:${this.partition}:s3:::${bucketName.valueAsString}`, `arn:${this.partition}:s3:::${bucketName.valueAsString}/*`],
     }));
 
-    // Add permissions for Bedrock - scoped to specific actions needed
+    // Bedrock model invocation (inference profile + foundation model in every destination region)
     lambdaRole.addToPolicy(new iam.PolicyStatement({
       actions: [
         'bedrock:InvokeModel',
         'bedrock:InvokeModelWithResponseStream',
       ],
       resources: [
-        `arn:aws:bedrock:${this.region}::foundation-model/us.amazon.nova-lite-v1:0`,
-        `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-lite-v1:0`,
-        `arn:aws:bedrock:${this.region}::foundation-model/us.amazon.nova-pro-v1:0`,
-        `arn:aws:bedrock:${this.region}::foundation-model/amazon.nova-pro-v1:0`,
+        `arn:${this.partition}:bedrock:*::foundation-model/openai.gpt-5.6-luna`,
+        `arn:${this.partition}:bedrock:*:${this.account}:inference-profile/*openai.gpt-5.6-luna`,
       ],
     }));
     
@@ -77,7 +74,7 @@ class Pdf2HtmlStack extends Stack {
       ],
       resources: [
         bdaProjectArn.valueAsString,
-        `arn:aws:bedrock:${this.region}:${this.account}:data-automation-invocation/*`,
+        `arn:${this.partition}:bedrock:${this.region}:${this.account}:data-automation-invocation/*`,
       ],
     }));
     
@@ -89,7 +86,7 @@ class Pdf2HtmlStack extends Stack {
         'bedrock:InvokeDataAutomationAsync',
       ],
       resources: [
-        `arn:aws:bedrock:*:${this.account}:data-automation-profile/*`,
+        `arn:${this.partition}:bedrock:*:${this.account}:data-automation-profile/*`,
       ],
     }));
     
@@ -101,7 +98,7 @@ class Pdf2HtmlStack extends Stack {
         'logs:PutLogEvents'
       ],
       resources: [
-        `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/Pdf2HtmlPipeline:*`,
+        `arn:${this.partition}:logs:${this.region}:${this.account}:log-group:/aws/lambda/Pdf2HtmlPipeline:*`,
       ],
     }));
 
@@ -137,7 +134,7 @@ class Pdf2HtmlStack extends Stack {
     });
 
     new CfnOutput(this, 'RepositoryUriOutput', {
-      value: `${this.account}.dkr.ecr.${this.region}.amazonaws.com/pdf2html-lambda`,
+      value: `${this.account}.dkr.ecr.${this.region}.${this.urlSuffix}/pdf2html-lambda`,
       description: 'URI of the ECR repository',
     });
 

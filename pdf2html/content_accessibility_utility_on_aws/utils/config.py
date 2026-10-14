@@ -290,7 +290,7 @@ config_manager = ConfigManager(
         # Accessibility remediation defaults
         "remediate": {
             "max_issues": None,  # None = all issues
-            "model_id": "us.amazon.nova-lite-v1:0",
+            "model_id": None,  # None = region-aware default (see utils/aws_ids.py)
             "issue_types": None,  # List of issue types to remediate, None = all
             "severity_threshold": "minor",  # Include all issues by default
             "report_format": "json",

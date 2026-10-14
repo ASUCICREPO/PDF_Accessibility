@@ -15,6 +15,7 @@ from typing import Optional
 from content_accessibility_utility_on_aws.utils.logging_helper import setup_logger
 from content_accessibility_utility_on_aws.utils.usage_tracker import SessionUsageTracker
 from content_accessibility_utility_on_aws.utils.image_utils import resize_image
+from content_accessibility_utility_on_aws.utils.aws_ids import default_model_id, model_request_fields
 
 # Set up module-level logger
 logger = setup_logger(__name__)
@@ -39,7 +40,7 @@ class BedrockClient:
 
     def __init__(
         self,
-        model_id: str = "us.amazon.nova-lite-v1:0",
+        model_id: Optional[str] = None,
         profile: Optional[str] = None,
     ):
         """
@@ -49,7 +50,6 @@ class BedrockClient:
             model_id: The ID of the Bedrock model to use
             profile: AWS profile name to use for authentication
         """
-        self.model_id = model_id
         self.profile = profile
         try:
             # Create a boto3 session with the provided profile
@@ -69,15 +69,16 @@ class BedrockClient:
                 session = boto3.Session()
 
             self.client = session.client("bedrock-runtime")
+            self.model_id = model_id or default_model_id(session.region_name)
             logger.debug(
-                f"Initialized Bedrock client with model: {model_id}, profile: {profile}"
+                f"Initialized Bedrock client with model: {self.model_id}, profile: {profile}"
             )
         except Exception as e:
             logger.warning(f"Failed to initialize Bedrock client: {e}")
             raise
 
     def generate_text(
-        self, prompt: str, purpose: str = "general", max_tokens: int = 500
+        self, prompt: str, purpose: str = "general", max_tokens: int = 1000
     ) -> str:
         """
         Generate text using the Bedrock model.
@@ -115,6 +116,7 @@ class BedrockClient:
                 inferenceConfig={
                     "maxTokens": max_tokens,
                 },
+                **model_request_fields(self.model_id),
             )
 
             # Extract the generated text
@@ -125,7 +127,7 @@ class BedrockClient:
                 and "content" in response["output"]["message"]
                 and len(response["output"]["message"]["content"]) > 0
             ):
-                generated_text = response["output"]["message"]["content"][0]["text"]
+                generated_text = "".join(block.get("text", "") for block in response["output"]["message"]["content"])
 
                 # Track token usage
                 end_time = datetime.now()
@@ -160,7 +162,7 @@ class BedrockClient:
             )
 
     def generate_alt_text_for_image(
-        self, image_path: str, prompt: str, max_tokens: int = 500
+        self, image_path: str, prompt: str, max_tokens: int = 1000
     ) -> str:
         """
         Generate alt text for an image using multimodal capabilities.
@@ -260,6 +262,7 @@ class BedrockClient:
                 inferenceConfig={
                     "maxTokens": max_tokens,
                 },
+                **model_request_fields(self.model_id),
             )
 
             # Extract the generated text
@@ -269,7 +272,7 @@ class BedrockClient:
                 and "content" in response["output"]["message"]
                 and len(response["output"]["message"]["content"]) > 0
             ):
-                generated_text = response["output"]["message"]["content"][0]["text"]
+                generated_text = "".join(block.get("text", "") for block in response["output"]["message"]["content"])
 
                 # Track token usage
                 end_time = datetime.now()

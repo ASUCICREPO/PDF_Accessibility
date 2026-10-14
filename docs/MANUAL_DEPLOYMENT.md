@@ -6,7 +6,7 @@ This guide provides detailed instructions for manually deploying the PDF-to-PDF 
 
 Before running the AWS CDK stack, ensure the following are installed and configured:
 
-1. **AWS Bedrock Access**: Ensure your AWS account has access to the Nova pro model in Amazon Bedrock.
+1. **AWS Bedrock Access**: Ensure your AWS account has access to the OpenAI `openai.gpt-5.6-luna` model in Amazon Bedrock.
    - [Request access to Amazon Bedrock](https://console.aws.amazon.com/bedrock/) through the AWS console if not already enabled.
 
 2. **Adobe API Access** - An enterprise-level contract or a trial account (For Testing) for Adobe's API is required.

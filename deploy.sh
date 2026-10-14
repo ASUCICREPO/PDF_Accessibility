@@ -27,6 +27,8 @@ print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 print_header() { echo -e "${CYAN}$1${NC}"; }
+# Discard keystrokes typed while the script was busy so they are not read as menu input
+flush_stdin() { while read -r -t 0.1 _; do :; done; }
 
 # Global deployment tracking variables
 DEPLOYED_SOLUTIONS=()
@@ -200,13 +202,18 @@ deploy_backend_solution() {
             POLICY_FILE="${POLICY_DIR}/pdf2html-codebuild-policy.json"
         fi
         
+        # Policy files use the commercial partition; rewrite ARNs for the current partition (e.g. aws-us-gov)
+        RENDERED_POLICY_FILE=$(mktemp)
+        sed "s/arn:aws:/arn:${PARTITION}:/g" "$POLICY_FILE" > "$RENDERED_POLICY_FILE"
+
         # Create the policy
         print_status "📋 Creating IAM policy: $POLICY_NAME"
         POLICY_RESPONSE=$(aws iam create-policy \
             --policy-name "$POLICY_NAME" \
-            --policy-document "file://${POLICY_FILE}" \
+            --policy-document "file://${RENDERED_POLICY_FILE}" \
             --description "Minimal IAM policy for $DEPLOYMENT_TYPE CodeBuild deployment" 2>/dev/null || \
-            aws iam get-policy --policy-arn "arn:aws:iam::$ACCOUNT_ID:policy/$POLICY_NAME" 2>/dev/null)
+            aws iam get-policy --policy-arn "arn:${PARTITION}:iam::$ACCOUNT_ID:policy/$POLICY_NAME" 2>/dev/null)
+        rm -f "$RENDERED_POLICY_FILE"
         
         if [ $? -eq 0 ]; then
             POLICY_ARN=$(echo "$POLICY_RESPONSE" | jq -r '.Policy.Arn // .Policy.Arn')
@@ -242,13 +249,11 @@ deploy_backend_solution() {
         BUILD_IMAGE="aws/codebuild/amazonlinux-x86_64-standard:5.0"
         COMPUTE_TYPE="BUILD_GENERAL1_SMALL"
         PRIVILEGED_MODE="true"
-        SOURCE_VERSION="main"
         BUILDSPEC_FILE="buildspec-unified.yml"
     else
         BUILD_IMAGE="aws/codebuild/amazonlinux2-x86_64-standard:5.0"
         COMPUTE_TYPE="BUILD_GENERAL1_LARGE"
         PRIVILEGED_MODE="true"
-        SOURCE_VERSION="main"
         BUILDSPEC_FILE="buildspec-unified.yml"
     fi
 
@@ -322,9 +327,9 @@ deploy_backend_solution() {
     # Monitor build progress
     print_status "📊 Monitoring deployment progress..."
     if [ "$DEPLOYMENT_TYPE" == "pdf2pdf" ]; then
-        print_status "$solution_name deployment typically takes 3-5 minutes... ⏰"
+        print_status "$solution_name deployment typically takes 10-15 minutes... ⏰"
     else
-        print_status "$solution_name deployment typically takes 5-10 minutes... ⏰"
+        print_status "$solution_name deployment typically takes 3-5 minutes... ⏰"
     fi
     echo ""
 
@@ -359,9 +364,35 @@ deploy_backend_solution() {
                 
                 LATEST_STREAM=$(aws logs describe-log-streams --log-group-name $LOG_GROUP --order-by LastEventTime --descending --max-items 1 --query 'logStreams[0].logStreamName' --output text 2>/dev/null || echo "")
                 
+                FAILED_PHASES=$(aws codebuild batch-get-builds --ids "$BUILD_ID" \
+                    --query 'builds[0].phases[?phaseStatus==`FAILED`].phaseType' --output text 2>/dev/null || echo "")
+                if [ -n "$FAILED_PHASES" ] && [ "$FAILED_PHASES" != "None" ]; then
+                    print_error "Failed phase(s): $FAILED_PHASES"
+                fi
+
                 if [ -n "$LATEST_STREAM" ] && [ "$LATEST_STREAM" != "None" ]; then
-                    print_error "Recent build logs:"
-                    aws logs get-log-events --log-group-name $LOG_GROUP --log-stream-name $LATEST_STREAM --query 'events[-30:].message' --output text 2>/dev/null || print_error "Could not retrieve logs"
+                    # Save the entire build log locally. The failed phase's command block is echoed
+                    # back at the end of the stream, so the tail alone never shows the real error.
+                    BUILD_LOG_FILE="build-log-${PROJECT_NAME}.txt"
+                    if aws logs tail "$LOG_GROUP" --log-stream-names "$LATEST_STREAM" --since 1d --format short > "$BUILD_LOG_FILE" 2>/dev/null \
+                        && [ -s "$BUILD_LOG_FILE" ]; then
+                        print_error "Full build log saved to: $(pwd)/$BUILD_LOG_FILE"
+                        echo ""
+                        print_error "Errors found in build log (with surrounding lines):"
+                        # Skip the echoed buildspec lines, which contain the word 'error' in their echo strings
+                        grep -n -i -E 'error|fail|denied|not authorized|ECONN|ENOTFOUND|ETIMEDOUT' "$BUILD_LOG_FILE" \
+                            | grep -v -E 'echo "|Phase context status code|if \[|Running command' | head -20 | cut -d: -f1 \
+                            | while read -r LINE; do
+                                START=$(( LINE > 3 ? LINE - 3 : 1 ))
+                                echo "----- line $LINE -----"
+                                sed -n "${START},$((LINE + 15))p" "$BUILD_LOG_FILE"
+                            done
+                        echo ""
+                        print_error "If the cause is not clear above, share $BUILD_LOG_FILE with support."
+                    else
+                        print_error "Could not download the full log. Last build log lines:"
+                        aws logs get-log-events --log-group-name $LOG_GROUP --log-stream-name $LATEST_STREAM --query 'events[-30:].message' --output text 2>/dev/null || print_error "Could not retrieve logs"
+                    fi
                 else
                     print_error "Could not retrieve build logs. Check CodeBuild console for details."
                 fi
@@ -443,6 +474,12 @@ deploy_backend_solution() {
 deploy_ui() {
     print_header "🎨 Deploying Frontend UI..."
     echo ""
+
+    # Amplify Hosting is not offered in AWS GovCloud
+    if [ "$PARTITION" == "aws-us-gov" ]; then
+        print_warning "⚠️ The Frontend UI is not available in AWS GovCloud. Upload PDFs directly to the S3 buckets instead."
+        return 0
+    fi
     
     # Validate that we have at least one deployed solution
     if [ ${#DEPLOYED_SOLUTIONS[@]} -eq 0 ]; then
@@ -559,11 +596,16 @@ show_next_step_options() {
     fi
     
     echo "1) Deploy $OTHER_SOLUTION_NAME (complete both backend solutions)"
-    echo "2) Deploy Frontend UI (for current solution)"
+    if [ "$PARTITION" == "aws-us-gov" ]; then
+        echo "2) Deploy Frontend UI (not available in AWS GovCloud)"
+    else
+        echo "2) Deploy Frontend UI (for current solution)"
+    fi
     echo "3) Finish (backend only)"
     echo ""
     
     while true; do
+        flush_stdin
         read -p "Enter your choice (1, 2, or 3): " NEXT_CHOICE
         
         case $NEXT_CHOICE in
@@ -581,6 +623,7 @@ show_next_step_options() {
                 print_status "🎉 Both backend solutions deployed successfully!"
                 echo ""
                 while true; do
+                    flush_stdin
                     read -p "Would you like to deploy the Frontend UI? (y/n): " DEPLOY_UI_CHOICE
                     case $DEPLOY_UI_CHOICE in
                         [Yy]*)
@@ -679,12 +722,41 @@ if [ -z "$REGION" ]; then
     exit 1
 fi
 
-print_success "✅ AWS credentials verified. Account: $ACCOUNT_ID, Region: $REGION"
+# Detect the AWS partition (aws, aws-us-gov, ...) from the caller ARN
+PARTITION=$(aws sts get-caller-identity --query "Arn" --output text | cut -d: -f2)
+if [ "$PARTITION" == "aws-us-gov" ]; then
+    CONSOLE_URL="https://console.amazonaws-us-gov.com"
+else
+    CONSOLE_URL="https://console.aws.amazon.com"
+fi
+
+print_success "✅ AWS credentials verified. Account: $ACCOUNT_ID, Region: $REGION, Partition: $PARTITION"
 echo ""
 
-# GitHub repository URL (hardcoded)
-GITHUB_URL="https://github.com/ASUCICREPO/PDF_Accessibility.git"
-print_success "   Repository: $GITHUB_URL ✅"
+# Verify the Bedrock model used by both solutions is enabled in this region
+case "$REGION" in
+    us-gov-*) PROFILE_PREFIX="us-gov." ;;
+    eu-*)     PROFILE_PREFIX="eu." ;;
+    ap-*)     PROFILE_PREFIX="apac." ;;
+    *)        PROFILE_PREFIX="us." ;;
+esac
+BEDROCK_MODEL_ID="${BEDROCK_MODEL_ID:-${PROFILE_PREFIX}openai.gpt-5.6-luna}"
+print_status "🔍 Verifying Bedrock access to $BEDROCK_MODEL_ID..."
+if BEDROCK_CHECK=$(aws bedrock-runtime converse --region "$REGION" --model-id "$BEDROCK_MODEL_ID" \
+        --messages '[{"role":"user","content":[{"text":"Reply with OK"}]}]' --inference-config '{"maxTokens":20}' 2>&1 >/dev/null); then
+    print_success "✅ Bedrock model access verified"
+else
+    print_error "Cannot invoke $BEDROCK_MODEL_ID in $REGION:"
+    print_error "   ${BEDROCK_CHECK:0:300}"
+    print_error "Enable the model in the Amazon Bedrock console (Model catalog → OpenAI → GPT-5.6 Luna → Request access) for this region, then re-run."
+    exit 1
+fi
+echo ""
+
+# GitHub repository and branch CodeBuild deploys from (override with GITHUB_URL / SOURCE_VERSION env vars)
+GITHUB_URL="${GITHUB_URL:-https://github.com/ASUCICREPO/PDF_Accessibility.git}"
+SOURCE_VERSION="${SOURCE_VERSION:-main}"
+print_success "   Repository: $GITHUB_URL ($SOURCE_VERSION) ✅"
 echo ""
 
 # CodeBuild project name (hardcoded with timestamp)
@@ -719,7 +791,7 @@ fi
 
 echo ""
 print_status "🔍 Monitor builds in AWS Console:"
-print_status "   https://console.aws.amazon.com/codesuite/codebuild/projects"
+print_status "   ${CONSOLE_URL}/codesuite/codebuild/projects?region=${REGION}"
 echo ""
 
 print_success "🚀 Your PDF accessibility solution is ready to use!"
